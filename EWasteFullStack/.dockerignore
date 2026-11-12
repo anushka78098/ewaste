@@ -1,0 +1,10 @@
+out
+out-test
+out-fx
+lib
+lib-fx
+data
+dist
+docs
+test
+*.zip

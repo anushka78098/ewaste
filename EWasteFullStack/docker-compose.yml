@@ -1,0 +1,43 @@
+# Production-style setup: the app (plain HTTP, only reachable inside the compose network) behind Caddy, which gets
+# and renews a free HTTPS certificate automatically.
+#
+#   1. cp deploy/.env.example .env   and edit it (domain name, admin password, optional email settings)
+#   2. docker compose up -d --build
+#   3. point your domain's DNS A record at this server and open ports 80 and 443
+#
+# For a quick local try-out without HTTPS:  docker compose up --build app   (the app is then on http://localhost:8080)
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      EWASTE_ADMIN_PASSWORD: ${EWASTE_ADMIN_PASSWORD:?set EWASTE_ADMIN_PASSWORD in .env}
+      EWASTE_MAIL_ENABLED: ${EWASTE_MAIL_ENABLED:-false}
+      EWASTE_MAIL_HOST: ${EWASTE_MAIL_HOST:-}
+      EWASTE_MAIL_PORT: ${EWASTE_MAIL_PORT:-587}
+      EWASTE_MAIL_SECURITY: ${EWASTE_MAIL_SECURITY:-STARTTLS}
+      EWASTE_MAIL_USERNAME: ${EWASTE_MAIL_USERNAME:-}
+      EWASTE_MAIL_PASSWORD: ${EWASTE_MAIL_PASSWORD:-}
+      EWASTE_MAIL_FROM: ${EWASTE_MAIL_FROM:-}
+    volumes:
+      - ewaste-data:/data
+    ports:
+      - "127.0.0.1:8080:8080"   # for local testing only; Caddy talks to the app over the internal network
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      EWASTE_DOMAIN: ${EWASTE_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  ewaste-data:
+  caddy-data:
+  caddy-config:

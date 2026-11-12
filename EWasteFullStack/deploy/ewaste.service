@@ -1,0 +1,27 @@
+# systemd unit for running the server directly on a Linux VPS (no Docker).
+# Install:  sudo cp deploy/ewaste.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now ewaste
+# Layout assumed: /opt/ewaste/{ewaste-server.jar,lib/sqlite-jdbc-3.36.0.3.jar} (produced by scripts/package.sh) and data in /var/lib/ewaste
+[Unit]
+Description=E-Waste Manager server
+After=network.target
+
+[Service]
+User=ewaste
+Group=ewaste
+WorkingDirectory=/opt/ewaste
+EnvironmentFile=/etc/ewaste.env
+Environment=EWASTE_HOST=127.0.0.1
+Environment=EWASTE_PORT=8080
+Environment=EWASTE_DATA=/var/lib/ewaste
+ExecStart=/usr/bin/java -jar /opt/ewaste/ewaste-server.jar
+Restart=on-failure
+RestartSec=5
+# hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ewaste
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

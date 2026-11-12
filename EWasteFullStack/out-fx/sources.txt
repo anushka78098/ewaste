@@ -1,0 +1,11 @@
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\AdminPages.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\Charts.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\Fx.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\FxDashboards.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\FxLauncher.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\FxMain.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\FxMarketPages.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\FxPage.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\MainView.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\RecyclerPages.java
+C:\Users\facei\Downloads\EWasteFullStack\EWasteFullStack\src-fx\com\ewaste\fx\UserPages.java

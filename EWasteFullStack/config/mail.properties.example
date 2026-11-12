@@ -1,0 +1,21 @@
+# Copy this file to config/mail.properties and set mail.enabled=true to turn on email notifications.
+# Restart the server afterwards. The server log shows whether email is enabled.
+mail.enabled=false
+
+# --- Gmail (needs 2-step verification and an "App password": https://myaccount.google.com/apppasswords)
+mail.host=smtp.gmail.com
+mail.port=587
+mail.security=STARTTLS
+mail.username=you@gmail.com
+mail.password=your-16-char-app-password
+mail.from=you@gmail.com
+
+# --- Outlook / Microsoft 365:  mail.host=smtp.office365.com  mail.port=587  mail.security=STARTTLS
+# --- Port 465 services:        mail.security=SSL  mail.port=465
+# --- Local test server (e.g. MailHog / smtp4dev, no login):  mail.host=localhost mail.port=1025 mail.security=NONE
+#     and leave mail.username empty.
+
+# Keep the password out of this file by setting the EWASTE_MAIL_PASSWORD environment variable instead.
+
+# Also email users about new market listings and price drops? (in-app alerts are always sent)
+mail.marketAlerts=false
