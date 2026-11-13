@@ -23,6 +23,15 @@ public final class DecisionEngine {
         return round2(cat.baseValue * cond.valueFactor * depreciation);
     }
 
+    /** Estimate resale using this engine's category-specific useful-life policy. */
+    public double estimateValueForPolicy(Category category, int ageYears, Condition condition) {
+        if (category == null || condition == null) throw new IllegalArgumentException("Category and condition are required.");
+        if (ageYears < 0 || ageYears > 40) throw new IllegalArgumentException("Age must be between 0 and 40 years.");
+        DecisionPolicy.CategoryRule rule = policy.forCategory(category);
+        double depreciation = Math.max(0.1, 1.0 - (double) ageYears / (rule.usefulLifeYears + 1));
+        return round2(category.baseValue * condition.valueFactor * depreciation);
+    }
+
     public DecisionReport assess(Category category, int ageYears, Condition condition, Double estimatedResaleValue,
                                  Double repairCost, Double recyclingValue, Boolean hazardousClassification,
                                  Double weightKg) {
@@ -37,12 +46,11 @@ public final class DecisionEngine {
         DecisionPolicy.CategoryRule rule = policy.forCategory(category);
         DecisionReport report = new DecisionReport();
         report.remainingUsefulLifeYears = Math.max(0, (int) Math.ceil(rule.usefulLifeYears - ageYears));
-        double depreciatedFunctionalValue = round2(category.baseValue
-                * Math.max(0.1, 1.0 - (double) ageYears / (rule.usefulLifeYears + 1)));
         boolean hasResale = estimatedResaleValue != null;
-        report.estimatedResaleValue = round2(hasResale ? estimatedResaleValue : depreciatedFunctionalValue);
+        report.estimatedResaleValue = round2(hasResale ? estimatedResaleValue
+                : estimateValueForPolicy(category, ageYears, Condition.WORKING));
         report.resaleValueAsIs = round2(hasResale ? estimatedResaleValue * condition.valueFactor
-                : depreciatedFunctionalValue * condition.valueFactor);
+                : report.estimatedResaleValue * condition.valueFactor);
         boolean hasRepair = repairCost != null;
         report.repairCost = round2(hasRepair ? repairCost : report.estimatedResaleValue * rule.estimatedRepairCostRatio);
         boolean hasRecovery = recyclingValue != null;

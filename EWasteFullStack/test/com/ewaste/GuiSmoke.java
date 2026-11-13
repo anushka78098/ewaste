@@ -109,19 +109,21 @@ public class GuiSmoke {
             f[0].setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             f[0].setVisible(true);
         });
-        JTabbedPane tabs = find(f[0].getContentPane(), JTabbedPane.class);
-        int n = tabs.getTabCount();
+        JList<?> navigation = findNamed(f[0].getContentPane(), JList.class, "main-navigation");
+        if (navigation == null) throw new IllegalStateException("Main navigation was not found");
+        int n = navigation.getModel().getSize();
         for (int i = 0; i < n; i++) {
             final int idx = i;
             boolean dash = i == 0;   // dashboards are tall: render them at full height
-            SwingUtilities.invokeAndWait(() -> { f[0].setSize(1100, dash ? 1500 : 700); tabs.setSelectedIndex(idx); });
+            String title = String.valueOf(navigation.getModel().getElementAt(i));
+            SwingUtilities.invokeAndWait(() -> { f[0].setSize(1280, dash ? 1500 : 760); navigation.setSelectedIndex(idx); });
             Thread.sleep(1200);
-            checkDialogs(user + " tab " + tabs.getTitleAt(i));
-            String name = user + "-" + (i + 1) + "-" + tabs.getTitleAt(i).toLowerCase().replaceAll("[^a-z]+", "-") + ".png";
+            checkDialogs(user + " page " + title);
+            String name = user + "-" + (i + 1) + "-" + title.toLowerCase().replaceAll("[^a-z]+", "-") + ".png";
             shot(f[0], new File(outDir, name));
         }
         SwingUtilities.invokeAndWait(f[0]::dispose);
-        System.out.println(user + ": " + n + " tabs rendered");
+        System.out.println(user + ": " + n + " pages rendered");
     }
 
     static void checkDialogs(String where) throws Exception {
@@ -137,6 +139,14 @@ public class GuiSmoke {
         for (Component k : c.getComponents()) {
             if (type.isInstance(k)) return type.cast(k);
             if (k instanceof Container) { T r = find((Container) k, type); if (r != null) return r; }
+        }
+        return null;
+    }
+
+    static <T extends Component> T findNamed(Container c, Class<T> type, String name) {
+        for (Component k : c.getComponents()) {
+            if (type.isInstance(k) && name.equals(k.getName())) return type.cast(k);
+            if (k instanceof Container) { T r = findNamed((Container) k, type, name); if (r != null) return r; }
         }
         return null;
     }

@@ -19,6 +19,12 @@ echo "--- dashboards, tracking, drives ---"; grep -E "FAIL|passed" /tmp/ewaste_d
 java -cp "out:lib/*" com.ewaste.DecisionEngineTest > /tmp/ewaste_decision.txt 2>&1 || code=1
 echo "--- explainable decision engine ---"; grep -E "FAIL|passed" /tmp/ewaste_decision.txt
 
+java -cp "out:lib/*" com.ewaste.EcoChallengeTest > /tmp/ewaste_eco.txt 2>&1 || code=1
+echo "--- eco challenges and achievements ---"; grep -E "FAIL|passed" /tmp/ewaste_eco.txt
+
+java -cp "out:lib/*" com.ewaste.LoginModeTest > /tmp/ewaste_login_mode.txt 2>&1 || code=1
+echo "--- login modes ---"; grep -E "FAIL|passed" /tmp/ewaste_login_mode.txt
+
 java -cp "out:lib/*" com.ewaste.server.ThrottleTest > /tmp/ewaste_throttle.txt 2>&1 || code=1
 echo "--- login throttle ---"; grep -E "FAIL|passed" /tmp/ewaste_throttle.txt
 

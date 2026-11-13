@@ -8,11 +8,13 @@ public class LoginFrame extends JFrame {
     private final JTextField server;
     private final JTextField user = new JTextField(18);
     private final JPasswordField pass = new JPasswordField(18);
+    private final JComboBox<LoginMode> mode = new JComboBox<>(LoginMode.values());
     private final JLabel status = new JLabel(" ");
 
     public LoginFrame(String defaultServer) {
         super("E-Waste Manager - Sign in");
         server = new JTextField(defaultServer, 18);
+        mode.setSelectedItem(LoginMode.BUYER);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 
         JPanel banner = new JPanel(new GridLayout(2, 1));
@@ -22,12 +24,12 @@ public class LoginFrame extends JFrame {
         t.setForeground(Color.WHITE);
         t.setFont(t.getFont().deriveFont(Font.BOLD, 24f));
         JLabel sub = new JLabel("Reuse. Repair. Recycle responsibly.");
-        sub.setForeground(new Color(0xC8E6C9));
+        sub.setForeground(new Color(0xD5E9FF));
         banner.add(t);
         banner.add(sub);
 
         Ui.Form f = new Ui.Form();
-        f.add("Server", server).add("Username", user).add("Password", pass);
+        f.add("Server", server).add("Login as", mode).add("Username", user).add("Password", pass);
         JButton login = Ui.primary("Sign in", this::login);
         JButton register = Ui.button("Create account...", this::register);
         JPanel buttons = Ui.buttonRow(login, register, Ui.button("Track an item...", this::track));
@@ -62,18 +64,25 @@ public class LoginFrame extends JFrame {
     private void login() {
         ApiClient api = new ApiClient(server.getText());
         App app = new App(api);
+        LoginMode selectedMode = (LoginMode) mode.getSelectedItem();
         String u = user.getText().trim(), p = new String(pass.getPassword());
         status.setText("Signing in...");
         Ui.run(this, () -> {
             app.user = api.login(u, p);
+            if (selectedMode == null || !selectedMode.matchesRole(Ui.s(app.user.get("role")))) {
+                api.logout();
+                throw new IllegalArgumentException("The selected sign-in mode does not match this account.");
+            }
             app.loadMeta();
             return app;
         }, a -> {
             pass.setText("");
             dispose();
             Runnable back = () -> new LoginFrame(api.baseUrl()).setVisible(true);
-            (a.isAdmin() ? AdminFrame.create(a, back) : a.isRecycler()
-                    ? RecyclerFrame.create(a, back) : UserFrame.create(a, back)).setVisible(true);
+            MainFrame frame = a.isAdmin() ? AdminFrame.create(a, back) : a.isRecycler()
+                    ? RecyclerFrame.create(a, back, selectedMode.dashboardTitle())
+                    : UserFrame.create(a, back, selectedMode.dashboardTitle());
+            frame.setVisible(true);
         }, () -> status.setText("Sign-in failed."));
     }
 

@@ -79,6 +79,11 @@ public class DecisionEngineTest {
                 400.0, 40.0, 10.0, false, 5.0);
         check("category-specific repair threshold is overrideable",
                 overridden.recommendedDecision == Decision.RECYCLE);
+        DecisionEngine extendedLife = new DecisionEngine(DecisionPolicy.defaults().withRule(Category.LAPTOP,
+                new DecisionPolicy.CategoryRule(14, 1, 0.45, 0.25, 0.38)));
+        check("configured useful life also controls refurbishment resale estimates",
+                extendedLife.estimateValueForPolicy(Category.LAPTOP, 7, Condition.WORKING)
+                        > DecisionEngine.estimateValue(Category.LAPTOP, 7, Condition.WORKING));
 
         Path config = Files.createTempFile("ewaste-decision", ".properties");
         try {

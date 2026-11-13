@@ -143,7 +143,7 @@ public class ItemService {
         expect(i, ItemStatus.REFURBISHING);
         i.condition = Condition.WORKING;
         i.decision = Decision.REUSE;
-        double v = DecisionEngine.estimateValue(i.category, i.ageYears, Condition.WORKING);
+        double v = decisionEngine.estimateValueForPolicy(i.category, i.ageYears, Condition.WORKING);
         i.estimatedValue = Math.max(v, DecisionEngine.round2(i.repairCost * 1.3));
         i.status = ItemStatus.COLLECTED;
         repo.saveItem(i);

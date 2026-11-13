@@ -16,6 +16,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.Executors;
+import java.util.logging.FileHandler;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 /**
  * Starts the REST backend.
@@ -25,6 +30,8 @@ import java.util.concurrent.Executors;
  * Decision thresholds: EWASTE_DECISION_FILE. First admin password: EWASTE_ADMIN_PASSWORD.
  */
 public class ServerMain {
+    private static final Logger LOGGER = Logger.getLogger(ServerMain.class.getName());
+
     public static void main(String[] args) throws IOException {
         int port = Integer.parseInt(env("EWASTE_PORT", "8080"));
         String host = env("EWASTE_HOST", "127.0.0.1");
@@ -41,6 +48,7 @@ public class ServerMain {
             else { System.err.println("Unknown option " + a); System.exit(2); }
         }
         Files.createDirectories(Paths.get(dataDir));
+        Handler fileLog = configureLogging(Paths.get(dataDir));
 
         Repository repo = null;
         boolean wantSqlite = store.equals("sqlite") || (store.equals("auto") && SqliteRepository.driverAvailable());
@@ -49,7 +57,7 @@ public class ServerMain {
                 repo = new SqliteRepository(Paths.get(dataDir, "ewaste.db").toString());
             } catch (RuntimeException | LinkageError e) {
                 if (store.equals("sqlite")) throw e;
-                System.err.println("WARNING: SQLite could not be opened (" + e.getMessage() + "). Falling back to the file-backed store.");
+                LOGGER.log(Level.WARNING, "SQLite could not be opened; falling back to the file-backed store.", e);
             }
         } else if (store.equals("auto")) {
             System.out.println("NOTE: SQLite driver not found in lib/. Using the file-backed store. Run scripts/setup-sqlite to enable SQLite.");
@@ -65,7 +73,13 @@ public class ServerMain {
         final Mailer mailer = new SmtpMailer(mailCfg);
         DecisionPolicy decisionPolicy = DecisionPolicy.load(Paths.get(decisionFile));
         HttpServer server = start(store0, host, port, mailer, decisionPolicy);
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> { server.stop(0); mailer.close(); store0.close(); }));
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            server.stop(0);
+            mailer.close();
+            try { store0.close(); }
+            finally { fileLog.close(); }
+        }));
+        LOGGER.info("E-Waste API server starting on " + host + ":" + port + " using " + store0.describe());
         System.out.println("E-Waste server running at http://" + host + ":" + port + "/api  (storage: " + store0.describe() + ")");
         System.out.println(mailCfg.enabled ? "Email notifications: ON via " + mailCfg.host + ":" + mailCfg.port + " (" + mailCfg.security + "), from " + mailCfg.from
                 : "Email notifications: off (copy config/mail.properties.example to config/mail.properties to enable)");
@@ -73,6 +87,13 @@ public class ServerMain {
             System.out.println("WARNING: the admin account still uses the default password (admin / admin123). Change it in the app (Profile tab) or set EWASTE_ADMIN_PASSWORD before the first start.");
         else
             System.out.println("Admin account: admin. Press Ctrl+C to stop.");
+    }
+
+    private static Handler configureLogging(Path dataDir) throws IOException {
+        FileHandler handler = new FileHandler(dataDir.resolve("ewaste-%g.log").toString(), 1_000_000, 3, true);
+        handler.setFormatter(new SimpleFormatter());
+        Logger.getLogger("").addHandler(handler);
+        return handler;
     }
 
     private static String env(String name, String dflt) {

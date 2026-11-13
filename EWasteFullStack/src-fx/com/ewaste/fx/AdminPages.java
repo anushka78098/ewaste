@@ -18,8 +18,9 @@ final class AdminPages {
 
     static List<FxPage> create(App app) {
         return Arrays.asList(new FxDashboards.Admin(app), new FxMarketPages.Dashboard(app, false), new FxMarketPages.Dashboard(app, true),
-                new Review(app), new Inventory(app), new Listings(app), new AuctionAdmin(app), new FxMarketPages.Messages(app), new Recycling(app), new Drives(app),
-                new AllItems(app), new Users(app), new Announce(app), new UserPages.Profile(app));
+                new Review(app), new Inventory(app), new Listings(app), new AuctionAdmin(app), new FxMarketPages.Messages(app),
+                new FxSupportPage(app, true), new Recycling(app), new Drives(app),
+                new UserPages.EcoChallenges(app, true), new AllItems(app), new Users(app), new Announce(app), new UserPages.Profile(app));
     }
 
     private static Map<String, Object> need(Fx.Grid t) {
@@ -265,6 +266,9 @@ final class AdminPages {
 
         Recycling(App app) {
             super(app, "Recycling");
+            eligible.setAccent("#4267D5", "#6688F0", "#FFFFFF");
+            regular.setAccent("#0B807F", "#20A5A1", "#FFFFFF");
+            hazardous.setAccent("#A86F00", "#CC941B", "#FFFFFF");
             HBox cards = new HBox(10, eligible, regular, hazardous);
             for (Fx.Kpi k : new Fx.Kpi[]{eligible, regular, hazardous}) HBox.setHgrow(k, Priority.ALWAYS);
             VBox north = new VBox(8, header("Recycling queue & shipments", Fx.button("Refresh", this::refresh)), cards,

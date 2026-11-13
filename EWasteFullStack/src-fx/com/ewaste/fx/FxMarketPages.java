@@ -46,6 +46,9 @@ final class FxMarketPages {
                         .col("Paid", m -> Ui.money(m.get("amountPaid"))).col("Date", m -> Ui.date(m.get("createdAt")));
                 setTop(header("Your marketplace purchases", Fx.button("Refresh", this::refresh)));
             }
+            first.setAccent("#4267D5", "#6688F0", "#FFFFFF");
+            second.setAccent("#8150D8", "#AA70E8", "#FFFFFF");
+            third.setAccent("#A86F00", "#CC941B", "#FFFFFF");
             HBox cards = new HBox(10, first, second, third);
             for (Region card : new Region[]{first, second, third}) HBox.setHgrow(card, Priority.ALWAYS);
             VBox body = new VBox(10, cards, rows);

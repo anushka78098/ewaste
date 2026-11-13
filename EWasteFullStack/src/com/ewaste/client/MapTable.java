@@ -35,10 +35,16 @@ public class MapTable extends JTable {
         });
         setAutoCreateRowSorter(true);
         setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        setRowHeight(24);
+        setRowHeight(30);
         setFillsViewportHeight(true);
         setShowGrid(false);
         setIntercellSpacing(new java.awt.Dimension(0, 1));
+        setBackground(Ui.SURFACE);
+        setSelectionBackground(Ui.GREEN_LIGHT);
+        setSelectionForeground(Ui.GREEN_DARK);
+        getTableHeader().setBackground(new java.awt.Color(0xEEF3EF));
+        getTableHeader().setForeground(Ui.GREEN_DARK);
+        getTableHeader().setFont(getTableHeader().getFont().deriveFont(java.awt.Font.BOLD));
         DefaultTableCellRenderer right = new DefaultTableCellRenderer();
         right.setHorizontalAlignment(SwingConstants.RIGHT);
         for (int i = 0; i < cols.length; i++) if (cols[i].right) getColumnModel().getColumn(i).setCellRenderer(right);

@@ -23,9 +23,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /** REST API: routing, authentication, JSON in/out. See docs/API.md for the endpoint list. */
 public class Api implements HttpHandler {
+    private static final Logger LOGGER = Logger.getLogger(Api.class.getName());
+
     enum Access { PUBLIC, USER, ADMIN, RECYCLER }
 
     interface Handler { Object handle(Ctx c) throws Exception; }
@@ -117,8 +121,10 @@ public class Api implements HttpHandler {
     private final RecyclingService recycling;
     private final ReportService reports;
     private final CampaignService campaigns;
+    private final EcoChallengeService ecoChallenges;
     private final AnalyticsService analytics;
     private final MarketplaceMessagingService marketMessages;
+    private final SupportMessagingService supportMessages;
     private final List<Route> routes = new ArrayList<>();
     private final Object lock = new Object();
     private final LoginThrottle throttle = new LoginThrottle(5, 5 * 60_000L);
@@ -143,8 +149,10 @@ public class Api implements HttpHandler {
         this.recycling = new RecyclingService(repo, notes, items, auctions);
         this.reports = new ReportService(repo);
         this.campaigns = new CampaignService(repo, notes);
+        this.ecoChallenges = new EcoChallengeService(repo, notes);
         this.analytics = new AnalyticsService(repo, campaigns);
         this.marketMessages = new MarketplaceMessagingService(repo, notes);
+        this.supportMessages = new SupportMessagingService(repo, notes);
         registerRoutes();
     }
 
@@ -208,6 +216,17 @@ public class Api implements HttpHandler {
         route("PUT", "/api/me", Access.USER, c ->
                 Dto.user(auth.updateProfile(c.user, c.opt("fullName"), c.opt("email"), c.opt("phone"), c.opt("address"),
                         c.body.containsKey("emailOptOut") ? c.bool("emailOptOut") : null)));
+        route("GET", "/api/me/support", Access.USER, c -> {
+            if (c.user.isAdmin()) throw new ApiException(403, "Use the administrator support inbox.");
+            List<Object> out = new ArrayList<>();
+            for (SupportMessage message : supportMessages.userConversation(c.user))
+                out.add(supportMessages.messageView(message));
+            return out;
+        });
+        route("POST", "/api/me/support", Access.USER, c -> {
+            if (c.user.isAdmin()) throw new ApiException(403, "Use the administrator support inbox.");
+            return supportMessages.messageView(supportMessages.sendFromUser(c.user, c.str("text")));
+        });
         route("POST", "/api/me/password", Access.USER, c -> {
             auth.changePassword(c.user, c.str("oldPassword"), c.str("newPassword"));
             return map("ok", true);
@@ -219,6 +238,13 @@ public class Api implements HttpHandler {
         route("GET", "/api/me/certificate", Access.USER, c ->
                 new Raw(analytics.certificateHtml(c.user, LocalDate.now()), "text/html; charset=utf-8", "impact-certificate.html"));
         route("GET", "/api/campaigns", Access.USER, c -> campaigns.list(true, LocalDate.now()));
+        route("GET", "/api/eco/challenges", Access.USER, c -> ecoChallenges.userView(c.user, LocalDate.now()));
+        route("POST", "/api/eco/challenges/{id}/enroll", Access.USER, c -> {
+            ChallengeEnrollment enrollment = ecoChallenges.enroll(c.user, c.pid("id"), LocalDate.now());
+            return map("challengeId", enrollment.challengeId, "status", enrollment.status.name());
+        });
+        route("GET", "/api/eco/leaderboard", Access.USER, c -> ecoChallenges.leaderboard(
+                parseEnum(EcoChallengePeriod.class, c.q("period") == null ? "WEEKLY" : c.q("period"), "period"), LocalDate.now()));
         route("POST", "/api/decision/report", Access.USER, c -> Dto.decisionReport(decisionEngine.assess(
                 c.en(Category.class, "category"), c.integer("ageYears"), c.en(Condition.class, "condition"),
                 optionalDouble(c.body.get("estimatedResaleValue"), "estimatedResaleValue"),
@@ -290,7 +316,9 @@ public class Api implements HttpHandler {
         route("POST", "/api/market/{id}/buy", Access.USER, c -> {
             int pts = c.body.containsKey("points") ? c.integer("points") : 0;
             Order o = market.buy(c.user, c.pid("id"), pts);
-            return Dto.order(o, items.require(o.itemId).name);
+            EWasteItem sold = items.require(o.itemId);
+            ecoChallenges.refreshForUser(sold.ownerId, LocalDate.now());
+            return Dto.order(o, sold.name);
         });
         route("GET", "/api/orders/mine", Access.USER, c -> {
             List<Object> out = new ArrayList<>();
@@ -344,7 +372,9 @@ public class Api implements HttpHandler {
         });
         route("POST", "/api/admin/items/{id}/collect", Access.ADMIN, c -> {
             int pts = items.markCollected(c.pid("id"));
-            return map("pointsAwarded", pts, "item", itemDto(items.require(c.pid("id"))));
+            EWasteItem collected = items.require(c.pid("id"));
+            ecoChallenges.refreshForUser(collected.ownerId, LocalDate.now());
+            return map("pointsAwarded", pts, "item", itemDto(collected));
         });
         route("POST", "/api/admin/items/{id}/decision", Access.ADMIN, c -> {
             if (auctions.reserved(c.pid("id")))
@@ -365,6 +395,7 @@ public class Api implements HttpHandler {
         route("POST", "/api/admin/listings", Access.ADMIN, c -> {
             Listing l = market.publish(c.integer("itemId"), c.dbl("price"));
             EWasteItem i = items.require(l.itemId);
+            ecoChallenges.refreshForUser(i.ownerId, LocalDate.now());
             return Dto.listing(l, i, ownerNames().getOrDefault(i.ownerId, "?"));
         });
         route("PUT", "/api/admin/listings/{id}", Access.ADMIN, c -> {
@@ -415,8 +446,16 @@ public class Api implements HttpHandler {
                     "queuedHazardous", recycling.queued(true).size(), "batches", bs);
         });
         route("POST", "/api/admin/recycling/queue-all", Access.ADMIN, c -> map("queued", recycling.queueAllEligible()));
-        route("POST", "/api/admin/recycling/batches", Access.ADMIN, c ->
-                Dto.batch(recycling.processBatch(c.str("partner"), c.bool("hazardous"))));
+        route("POST", "/api/admin/recycling/batches", Access.ADMIN, c -> {
+            RecyclingBatch batch = recycling.processBatch(c.str("partner"), c.bool("hazardous"));
+            Set<Integer> owners = new HashSet<>();
+            for (int itemId : batch.itemIds) {
+                EWasteItem item = repo.item(itemId);
+                if (item != null) owners.add(item.ownerId);
+            }
+            for (int ownerId : owners) ecoChallenges.refreshForUser(ownerId, LocalDate.now());
+            return Dto.batch(batch);
+        });
 
         // ---- admin: users, announcements, reports
         route("GET", "/api/admin/users", Access.ADMIN, c -> {
@@ -431,6 +470,15 @@ public class Api implements HttpHandler {
             }
             return out;
         });
+        route("GET", "/api/admin/support", Access.ADMIN, c -> supportMessages.adminInbox(c.user));
+        route("GET", "/api/admin/support/{userId}", Access.ADMIN, c -> {
+            List<Object> out = new ArrayList<>();
+            for (SupportMessage message : supportMessages.adminConversation(c.user, c.pid("userId")))
+                out.add(supportMessages.messageView(message));
+            return out;
+        });
+        route("POST", "/api/admin/support/{userId}", Access.ADMIN, c ->
+                supportMessages.messageView(supportMessages.sendFromAdmin(c.user, c.pid("userId"), c.str("text"))));
         route("POST", "/api/admin/users/{id}/active", Access.ADMIN, c -> { auth.setActive(c.pid("id"), c.bool("active")); return map("ok", true); });
         route("POST", "/api/admin/users/{id}/role", Access.ADMIN, c ->
                 Dto.user(auth.setRole(c.pid("id"), c.en(Role.class, "role"))));
@@ -461,7 +509,31 @@ public class Api implements HttpHandler {
             return campaigns.view(k, repo.items(), LocalDate.now());
         });
         route("POST", "/api/admin/campaigns/{id}/end", Access.ADMIN, c -> { campaigns.end(c.pid("id")); return map("ok", true); });
+        route("GET", "/api/admin/eco/challenges", Access.ADMIN, c -> ecoChallenges.adminView(LocalDate.now()));
+        route("POST", "/api/admin/eco/challenges", Access.ADMIN, c ->
+                ecoChallengeView(ecoChallenges.create(c.user, c.str("title"), c.opt("description"),
+                        c.en(EcoChallengeType.class, "type"), c.en(EcoChallengePeriod.class, "period"),
+                        c.dbl("targetValue"), c.integer("rewardPoints"), LocalDate.now()), LocalDate.now()));
+        route("POST", "/api/admin/eco/challenges/{id}/end", Access.ADMIN, c -> {
+            ecoChallenges.end(c.user, c.pid("id"));
+            return map("ok", true);
+        });
         route("GET", "/api/admin/export", Access.ADMIN, c -> new Raw(reports.exportCsv(), "text/csv; charset=utf-8", "items.csv"));
+    }
+
+    private Map<String, Object> ecoChallengeView(EcoChallenge challenge, LocalDate today) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", challenge.id);
+        result.put("title", challenge.title);
+        result.put("description", challenge.description);
+        result.put("type", challenge.type.name());
+        result.put("period", challenge.period.name());
+        result.put("targetValue", challenge.targetValue);
+        result.put("rewardPoints", challenge.rewardPoints);
+        result.put("startDate", challenge.startDate.toString());
+        result.put("endDate", challenge.endDate.toString());
+        result.put("status", challenge.active && !today.isAfter(challenge.endDate) ? "ACTIVE" : "EXPIRED");
+        return result;
     }
 
     private Object meta() {
@@ -677,7 +749,7 @@ public class Api implements HttpHandler {
             error(ex, 400, e.getMessage());
         } catch (Throwable t) {
             status = 500;
-            t.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Unhandled API request failure.", t);
             error(ex, 500, "Internal server error.");
         } finally {
             if (logRequests) System.out.println(status + " " + method + " " + path);

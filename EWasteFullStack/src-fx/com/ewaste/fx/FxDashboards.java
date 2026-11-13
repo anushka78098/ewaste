@@ -71,18 +71,23 @@ final class FxDashboards {
         private final Fx.Kpi kSubmitted = new Fx.Kpi("items submitted"), kKg = new Fx.Kpi("e-waste submitted"), kRevenue = new Fx.Kpi("market revenue"),
                 kRecycled = new Fx.Kpi("recycled"), kCo2 = new Fx.Kpi("CO2 avoided");
         private final Label totals = Fx.muted(" ");
-        private final BarChart<String, Number> submitted = Charts.bar("Items submitted", "#2E7D32");
-        private final LineChart<String, Number> revenue = Charts.line("Market revenue ($)", "#1976D2");
+        private final BarChart<String, Number> submitted = Charts.bar("Items submitted", "#2563EB");
+        private final LineChart<String, Number> revenue = Charts.line("Market revenue ($)", "#8B5CF6");
         private final PieChart outcomes = Charts.pie("What happens to items");
-        private final BarChart<Number, String> categories = Charts.hbar("E-waste by category (kg)", "#2E7D32");
-        private final BarChart<Number, String> funnel = Charts.hbar("Item funnel", "#1976D2");
-        private final BarChart<Number, String> donors = Charts.hbar("Top donors (kg collected)", "#6A1B9A");
+        private final BarChart<Number, String> categories = Charts.hbar("E-waste by category (kg)", "#D29B00");
+        private final BarChart<Number, String> funnel = Charts.hbar("Item funnel", "#0F9D8A");
+        private final BarChart<Number, String> donors = Charts.hbar("Top donors (kg collected)", "#0783C4");
         private final Fx.Grid status = new Fx.Grid().key("Status", "label").col("Items", m -> m.get("count"));
         private final Fx.Grid materials = new Fx.Grid().key("Material", "label").col("Recovered (kg)", m -> String.format("%.1f", Ui.d(m.get("kg"))));
         private boolean loading;
 
         Admin(App app) {
             super(app, "Dashboard");
+            kSubmitted.setAccent("#4267D5", "#6688F0", "#FFFFFF");
+            kKg.setAccent("#8150D8", "#AA70E8", "#FFFFFF");
+            kRevenue.setAccent("#A86F00", "#CC941B", "#FFFFFF");
+            kRecycled.setAccent("#0B807F", "#20A5A1", "#FFFFFF");
+            kCo2.setAccent("#1474A6", "#2D9BC8", "#FFFFFF");
             period.getItems().addAll("Last 7 days", "Last 30 days", "Last 90 days", "Last 180 days");
             period.getSelectionModel().select(1);
             period.setOnAction(e -> refresh());
@@ -166,13 +171,17 @@ final class FxDashboards {
         private final Label tierText = new Label(" ");
         private final FlowPane badges = new FlowPane(8, 8);
         private final PieChart pipeline = Charts.pie("Where my items are");
-        private final BarChart<String, Number> monthly = Charts.bar("Handed in per month (kg)", "#2E7D32");
+        private final BarChart<String, Number> monthly = Charts.bar("Handed in per month (kg)", "#2563EB");
         private final Label equiv = new Label(" ");
         private final VBox drives = new VBox(8);
         private final Fx.Grid recent = new Fx.Grid().key("Tracking code", "trackingCode").key("Item", "name").key("Status", "statusLabel");
 
         User(App app) {
             super(app, "My dashboard");
+            kKg.setAccent("#4267D5", "#6688F0", "#FFFFFF");
+            kPoints.setAccent("#8150D8", "#AA70E8", "#FFFFFF");
+            kCo2.setAccent("#A86F00", "#CC941B", "#FFFFFF");
+            kItems.setAccent("#0B807F", "#20A5A1", "#FFFFFF");
             tierName.setStyle("-fx-font-size:16px;-fx-font-weight:bold;-fx-text-fill:" + Fx.GREEN_DARK + ";");
             tierBar.setMaxWidth(Double.MAX_VALUE);
             equiv.setWrapText(true);

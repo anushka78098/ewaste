@@ -2,6 +2,7 @@ package com.ewaste.fx;
 
 import com.ewaste.client.ApiClient;
 import com.ewaste.client.App;
+import com.ewaste.client.LoginMode;
 import com.ewaste.client.Ui;
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -34,23 +35,28 @@ public class FxMain extends Application {
         TextField server = new TextField(serverUrl);
         TextField user = new TextField();
         PasswordField pass = new PasswordField();
+        ComboBox<LoginMode> mode = new ComboBox<>();
+        mode.getItems().addAll(LoginMode.values());
+        mode.getSelectionModel().select(LoginMode.BUYER);
         Label status = Fx.muted(" ");
 
         Label t = new Label("E-Waste Manager");
         t.setFont(Font.font(null, FontWeight.BOLD, 24));
         t.setStyle("-fx-text-fill:white;");
         Label sub = new Label("Reuse. Repair. Recycle responsibly.");
-        sub.setStyle("-fx-text-fill:#C8E6C9;");
+        sub.setStyle("-fx-text-fill:#D5E9FF;");
         VBox banner = new VBox(4, t, sub);
         banner.setPadding(new Insets(18, 24, 18, 24));
         banner.setStyle("-fx-background-color:" + Fx.GREEN + ";");
 
-        Button login = Fx.primary("Sign in", () -> doLogin(server.getText(), user.getText().trim(), pass.getText(), pass, status));
+        Button login = Fx.primary("Sign in", () -> doLogin(server.getText(), user.getText().trim(), pass.getText(), pass, status,
+                (LoginMode) mode.getValue()));
         login.setDefaultButton(true);
         Button register = Fx.button("Create account...", () -> register(server.getText(), user, status));
         Button track = Fx.button("Track an item...", () -> track(server.getText()));
 
-        VBox body = new VBox(10, Fx.form("Server", server, "Username", user, "Password", pass), new HBox(8, login, register, track), status);
+        VBox body = new VBox(10, Fx.form("Server", server, "Login as", mode, "Username", user, "Password", pass),
+                new HBox(8, login, register, track), status);
         body.setPadding(new Insets(16, 24, 16, 24));
         BorderPane root = new BorderPane();
         root.setTop(banner);
@@ -73,18 +79,22 @@ public class FxMain extends Application {
         th.start();
     }
 
-    private void doLogin(String url, String u, String p, PasswordField pass, Label status) {
+    private void doLogin(String url, String u, String p, PasswordField pass, Label status, LoginMode selectedMode) {
         ApiClient api = new ApiClient(url);
         App app = new App(api);
         serverUrl = url;
         status.setText("Signing in...");
         Fx.run(() -> {
             app.user = api.login(u, p);
+            if (selectedMode == null || !selectedMode.matchesRole(Ui.s(app.user.get("role")))) {
+                api.logout();
+                throw new IllegalArgumentException("The selected sign-in mode does not match this account.");
+            }
             app.loadMeta();
             return app;
         }, a -> {
             pass.clear();
-            MainView.show(stage, a, this::showLogin);
+            MainView.show(stage, a, this::showLogin, selectedMode.dashboardTitle());
         }, () -> status.setText("Sign-in failed."));
     }
 

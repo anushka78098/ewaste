@@ -8,9 +8,13 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /** JDBC repository for SQLite. Requires the sqlite-jdbc driver jar on the classpath (see scripts/setup). */
 public class SqliteRepository implements Repository {
+    private static final Logger LOGGER = Logger.getLogger(SqliteRepository.class.getName());
+
     @FunctionalInterface
     private interface RowMapper<T> { T map(ResultSet rs) throws SQLException; }
 
@@ -32,6 +36,7 @@ public class SqliteRepository implements Repository {
                     catch (SQLException e) { if (e.getMessage() == null || !e.getMessage().toLowerCase().contains("duplicate column")) throw e; }
                 }
             }
+            LOGGER.log(Level.INFO, "SQLite database ready at {0}", path);
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("SQLite JDBC driver not found on the classpath", e);
         } catch (SQLException e) {
@@ -61,6 +66,11 @@ public class SqliteRepository implements Repository {
         "CREATE TABLE IF NOT EXISTS market_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL REFERENCES listings(id), "
             + "sender_id INTEGER NOT NULL REFERENCES users(id), recipient_id INTEGER NOT NULL REFERENCES users(id), message TEXT NOT NULL, "
             + "file_name TEXT, media_type TEXT, file_data BLOB, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS support_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id), "
+            + "sender_id INTEGER NOT NULL REFERENCES users(id), message TEXT NOT NULL CHECK(length(trim(message)) BETWEEN 1 AND 4000), "
+            + "created_at TEXT NOT NULL, read_by_admin INTEGER NOT NULL DEFAULT 0 CHECK(read_by_admin IN (0,1)), "
+            + "read_by_user INTEGER NOT NULL DEFAULT 0 CHECK(read_by_user IN (0,1)))",
+        "CREATE INDEX IF NOT EXISTS idx_support_messages_user ON support_messages(user_id, id)",
         "CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, message TEXT NOT NULL, "
             + "created_at TEXT NOT NULL, is_read INTEGER NOT NULL DEFAULT 0)",
         "CREATE TABLE IF NOT EXISTS batches (id INTEGER PRIMARY KEY AUTOINCREMENT, partner TEXT NOT NULL, certified INTEGER NOT NULL, "
@@ -68,6 +78,24 @@ public class SqliteRepository implements Repository {
         "CREATE TABLE IF NOT EXISTS batch_items (batch_id INTEGER NOT NULL REFERENCES batches(id), item_id INTEGER NOT NULL REFERENCES items(id))",
         "CREATE TABLE IF NOT EXISTS campaigns (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, goal_kg REAL NOT NULL, "
             + "start_date TEXT NOT NULL, end_date TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)",
+        "CREATE TABLE IF NOT EXISTS eco_challenges (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', "
+            + "type TEXT NOT NULL CHECK (type IN ('DONATE_KG','DONATE_REUSABLE','VERIFIED_RECYCLING','COLLECTION_DRIVE')), "
+            + "period TEXT NOT NULL CHECK (period IN ('WEEKLY','MONTHLY')), target_value REAL NOT NULL CHECK (target_value > 0), "
+            + "reward_points INTEGER NOT NULL CHECK (reward_points > 0), start_date TEXT NOT NULL, end_date TEXT NOT NULL, "
+            + "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS challenge_enrollments (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            + "challenge_id INTEGER NOT NULL REFERENCES eco_challenges(id), user_id INTEGER NOT NULL REFERENCES users(id), "
+            + "enrolled_at TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0 CHECK (progress >= 0), "
+            + "status TEXT NOT NULL CHECK (status IN ('ACTIVE','COMPLETED','EXPIRED')), completed_at TEXT, halfway_notified INTEGER NOT NULL DEFAULT 0, "
+            + "UNIQUE(challenge_id, user_id), UNIQUE(id, challenge_id, user_id))",
+        "CREATE TABLE IF NOT EXISTS user_achievements (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id), "
+            + "achievement_key TEXT NOT NULL, label TEXT NOT NULL, description TEXT NOT NULL, earned_at TEXT NOT NULL, UNIQUE(user_id, achievement_key))",
+        "CREATE TABLE IF NOT EXISTS challenge_reward_history (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            + "challenge_id INTEGER NOT NULL, user_id INTEGER NOT NULL, points INTEGER NOT NULL CHECK (points > 0), awarded_at TEXT NOT NULL, "
+            + "FOREIGN KEY (challenge_id, user_id) REFERENCES challenge_enrollments(challenge_id, user_id), UNIQUE(challenge_id, user_id))",
+        "CREATE INDEX IF NOT EXISTS idx_eco_challenges_dates ON eco_challenges(active, start_date, end_date)",
+        "CREATE INDEX IF NOT EXISTS idx_challenge_enrollments_user ON challenge_enrollments(user_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_challenge_rewards_awarded ON challenge_reward_history(awarded_at, user_id)",
         "CREATE TABLE IF NOT EXISTS auctions (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL REFERENCES items(id), "
             + "created_by INTEGER NOT NULL REFERENCES users(id), minimum_bid REAL NOT NULL CHECK (minimum_bid > 0), closes_at TEXT NOT NULL, "
             + "created_at TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('OPEN','CLOSED','AWARDED','CANCELLED')), UNIQUE(id, item_id))",
@@ -187,6 +215,14 @@ public class SqliteRepository implements Repository {
         return m;
     };
 
+    private static final RowMapper<SupportMessage> SUPPORT_MESSAGE = rs -> {
+        SupportMessage m = new SupportMessage();
+        m.id = rs.getInt("id"); m.userId = rs.getInt("user_id"); m.senderId = rs.getInt("sender_id");
+        m.text = rs.getString("message"); m.time = LocalDateTime.parse(rs.getString("created_at"));
+        m.readByAdmin = rs.getInt("read_by_admin") == 1; m.readByUser = rs.getInt("read_by_user") == 1;
+        return m;
+    };
+
     private static final RowMapper<Order> ORDER = rs -> {
         Order o = new Order();
         o.id = rs.getInt("id"); o.listingId = rs.getInt("listing_id"); o.itemId = rs.getInt("item_id");
@@ -228,6 +264,49 @@ public class SqliteRepository implements Repository {
         h.action = rs.getString("action"); h.details = rs.getString("details");
         h.time = LocalDateTime.parse(rs.getString("created_at"));
         return h;
+    };
+
+    private static final RowMapper<EcoChallenge> ECO_CHALLENGE = rs -> {
+        EcoChallenge challenge = new EcoChallenge();
+        challenge.id = rs.getInt("id"); challenge.title = rs.getString("title");
+        challenge.description = nz(rs.getString("description"));
+        challenge.type = en(EcoChallengeType.class, rs.getString("type"));
+        challenge.period = en(EcoChallengePeriod.class, rs.getString("period"));
+        challenge.targetValue = rs.getDouble("target_value"); challenge.rewardPoints = rs.getInt("reward_points");
+        challenge.startDate = LocalDate.parse(rs.getString("start_date"));
+        challenge.endDate = LocalDate.parse(rs.getString("end_date"));
+        challenge.active = rs.getInt("active") == 1;
+        challenge.createdAt = LocalDateTime.parse(rs.getString("created_at"));
+        return challenge;
+    };
+
+    private static final RowMapper<ChallengeEnrollment> CHALLENGE_ENROLLMENT = rs -> {
+        ChallengeEnrollment enrollment = new ChallengeEnrollment();
+        enrollment.id = rs.getInt("id"); enrollment.challengeId = rs.getInt("challenge_id");
+        enrollment.userId = rs.getInt("user_id"); enrollment.enrolledAt = LocalDateTime.parse(rs.getString("enrolled_at"));
+        enrollment.progress = rs.getDouble("progress");
+        enrollment.status = en(EcoChallengeStatus.class, rs.getString("status"));
+        String completed = rs.getString("completed_at");
+        enrollment.completedAt = completed == null ? null : LocalDateTime.parse(completed);
+        enrollment.halfwayNotified = rs.getInt("halfway_notified") == 1;
+        return enrollment;
+    };
+
+    private static final RowMapper<Achievement> ACHIEVEMENT = rs -> {
+        Achievement achievement = new Achievement();
+        achievement.id = rs.getInt("id"); achievement.userId = rs.getInt("user_id");
+        achievement.key = rs.getString("achievement_key"); achievement.label = rs.getString("label");
+        achievement.description = rs.getString("description");
+        achievement.earnedAt = LocalDateTime.parse(rs.getString("earned_at"));
+        return achievement;
+    };
+
+    private static final RowMapper<ChallengeReward> CHALLENGE_REWARD = rs -> {
+        ChallengeReward reward = new ChallengeReward();
+        reward.id = rs.getInt("id"); reward.challengeId = rs.getInt("challenge_id");
+        reward.userId = rs.getInt("user_id"); reward.points = rs.getInt("points");
+        reward.awardedAt = LocalDateTime.parse(rs.getString("awarded_at"));
+        return reward;
     };
 
     private static String nz(String s) { return s == null ? "" : s; }
@@ -296,6 +375,19 @@ public class SqliteRepository implements Repository {
     }
     @Override public List<MarketMessage> marketMessages() {
         return query("SELECT * FROM market_messages ORDER BY id", MARKET_MESSAGE);
+    }
+    @Override public SupportMessage addSupportMessage(SupportMessage m) {
+        m.id = insert("INSERT INTO support_messages (user_id, sender_id, message, created_at, read_by_admin, read_by_user) "
+                        + "VALUES (?,?,?,?,?,?)",
+                m.userId, m.senderId, m.text, m.time, m.readByAdmin, m.readByUser);
+        return m;
+    }
+    @Override public List<SupportMessage> supportMessages() {
+        return query("SELECT * FROM support_messages ORDER BY id", SUPPORT_MESSAGE);
+    }
+    @Override public void saveSupportMessage(SupportMessage m) {
+        update("UPDATE support_messages SET read_by_admin=?, read_by_user=? WHERE id=?",
+                m.readByAdmin, m.readByUser, m.id);
     }
 
     // ------------------------------------------------------------------ notifications
@@ -381,6 +473,54 @@ public class SqliteRepository implements Repository {
                 c.name, c.description, c.goalKg, c.endDate, c.active, c.id);
     }
 
+    // ------------------------------------------------------------------ eco challenges
+    @Override public EcoChallenge addEcoChallenge(EcoChallenge challenge) {
+        challenge.id = insert("INSERT INTO eco_challenges (title, description, type, period, target_value, reward_points, start_date, end_date, active, created_at) "
+                        + "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                challenge.title, challenge.description, challenge.type, challenge.period, challenge.targetValue, challenge.rewardPoints,
+                challenge.startDate, challenge.endDate, challenge.active, challenge.createdAt);
+        return challenge;
+    }
+    @Override public EcoChallenge ecoChallenge(int id) { return one("SELECT * FROM eco_challenges WHERE id = ?", ECO_CHALLENGE, id); }
+    @Override public List<EcoChallenge> ecoChallenges() { return query("SELECT * FROM eco_challenges ORDER BY id", ECO_CHALLENGE); }
+    @Override public void saveEcoChallenge(EcoChallenge challenge) {
+        update("UPDATE eco_challenges SET title=?, description=?, active=? WHERE id=?",
+                challenge.title, challenge.description, challenge.active, challenge.id);
+    }
+    @Override public ChallengeEnrollment addChallengeEnrollment(ChallengeEnrollment enrollment) {
+        enrollment.id = insert("INSERT INTO challenge_enrollments (challenge_id, user_id, enrolled_at, progress, status, completed_at, halfway_notified) "
+                        + "VALUES (?,?,?,?,?,?,?)",
+                enrollment.challengeId, enrollment.userId, enrollment.enrolledAt, enrollment.progress, enrollment.status,
+                enrollment.completedAt, enrollment.halfwayNotified);
+        return enrollment;
+    }
+    @Override public ChallengeEnrollment challengeEnrollment(int challengeId, int userId) {
+        return one("SELECT * FROM challenge_enrollments WHERE challenge_id=? AND user_id=?", CHALLENGE_ENROLLMENT, challengeId, userId);
+    }
+    @Override public List<ChallengeEnrollment> challengeEnrollments() {
+        return query("SELECT * FROM challenge_enrollments ORDER BY id", CHALLENGE_ENROLLMENT);
+    }
+    @Override public void saveChallengeEnrollment(ChallengeEnrollment enrollment) {
+        update("UPDATE challenge_enrollments SET progress=?, status=?, completed_at=?, halfway_notified=? WHERE id=?",
+                enrollment.progress, enrollment.status, enrollment.completedAt, enrollment.halfwayNotified, enrollment.id);
+    }
+    @Override public Achievement addAchievement(Achievement achievement) {
+        achievement.id = insert("INSERT INTO user_achievements (user_id, achievement_key, label, description, earned_at) VALUES (?,?,?,?,?)",
+                achievement.userId, achievement.key, achievement.label, achievement.description, achievement.earnedAt);
+        return achievement;
+    }
+    @Override public List<Achievement> achievements() {
+        return query("SELECT * FROM user_achievements ORDER BY earned_at, id", ACHIEVEMENT);
+    }
+    @Override public ChallengeReward addChallengeReward(ChallengeReward reward) {
+        reward.id = insert("INSERT INTO challenge_reward_history (challenge_id, user_id, points, awarded_at) VALUES (?,?,?,?)",
+                reward.challengeId, reward.userId, reward.points, reward.awardedAt);
+        return reward;
+    }
+    @Override public List<ChallengeReward> challengeRewards() {
+        return query("SELECT * FROM challenge_reward_history ORDER BY awarded_at, id", CHALLENGE_REWARD);
+    }
+
     // ------------------------------------------------------------------ transactions
     @Override public <T> T atomic(Callable<T> work) {
         try {
@@ -392,7 +532,10 @@ public class SqliteRepository implements Repository {
                 c.commit();
                 return r;
             } catch (Exception e) {
-                try { c.rollback(); } catch (SQLException ignored) { }
+                try { c.rollback(); }
+                catch (SQLException rollbackError) {
+                    LOGGER.log(Level.SEVERE, "Could not roll back SQLite transaction.", rollbackError);
+                }
                 throw e;
             } finally {
                 depth--;
@@ -406,5 +549,8 @@ public class SqliteRepository implements Repository {
     }
 
     @Override public String describe() { return "SQLite database " + path; }
-    @Override public void close() { try { c.close(); } catch (SQLException ignored) { } }
+    @Override public void close() {
+        try { c.close(); }
+        catch (SQLException e) { LOGGER.log(Level.WARNING, "Could not close SQLite database " + path, e); }
+    }
 }

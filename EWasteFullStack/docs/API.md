@@ -25,7 +25,12 @@ Base URL `http://localhost:8080`. All bodies are JSON. Authenticated routes need
 | GET `/api/me/dashboard` | | `{points, pointsValue, kgDonated, co2Saved, itemCount, tier, badges[], pipeline, monthlyLabels[], monthlyKg[], equivalents, campaigns[], recent[]}` |
 | GET `/api/me/market/dashboard` | | `{buyer:{orders,totalSpent,recent[]}, seller:{activeListings,soldItems,salesTotal,items[]}}` |
 | GET `/api/me/certificate` | | printable HTML impact certificate (sent as an attachment) |
+| GET `/api/me/support` | | the signed-in user's private support conversation; marks admin replies as read |
+| POST `/api/me/support` | `text` (1–4000 characters) | send a private message to the administrators |
 | GET `/api/campaigns` | | active collection drives with live progress |
+| GET `/api/eco/challenges` | | challenges visible to the user, verified progress, earned achievements, and weekly/monthly challenge leaderboards |
+| POST `/api/eco/challenges/{id}/enroll` | | enroll the signed-in user; server calculates progress and awards any earned bonus |
+| GET `/api/eco/leaderboard` | `?period=WEEKLY\|MONTHLY` (default `WEEKLY`) | rankings by challenge bonus points earned in the current week/month |
 | POST `/api/decision/report` | `category, ageYears, condition, weightKg?, estimatedResaleValue?, repairCost?, recyclingValue?, hazardous?` | explainable non-persisted decision report with action, financial comparison, reasons, alternatives, warnings, environmental factor estimate and input-completeness quality |
 | POST `/api/items` | `name, brand?, category, ageYears, weightKg, condition, description?` | item (with `suggestedDecision`, `estimatedValue` and `decisionReport`) |
 | GET `/api/items/mine` | | own items |
@@ -75,6 +80,9 @@ Base URL `http://localhost:8080`. All bodies are JSON. Authenticated routes need
 | POST `/api/admin/users/{id}/active` | `active (bool)` | (de)activate |
 | POST `/api/admin/users/{id}/role` | `role` (`USER` or `RECYCLER`) | grant or remove recycler access; admin accounts cannot be changed |
 | POST `/api/admin/users/{id}/points` | `points` | bonus points |
+| GET `/api/admin/support` | | private support inbox with latest message and per-user unread count |
+| GET `/api/admin/support/{userId}` | | view or start a user's thread; marks user messages as read |
+| POST `/api/admin/support/{userId}` | `text` (1–4000 characters) | send a private reply or initiate a conversation |
 | POST `/api/admin/announce` | `message` | notify all users (in-app + email) |
 | GET `/api/admin/mail` | | email status: `enabled, host, port, security, from, sent, failed, queued, lastError` |
 | POST `/api/admin/mail/test` | `to` | send a test email now (400 with the SMTP error if it fails) |
@@ -83,6 +91,9 @@ Base URL `http://localhost:8080`. All bodies are JSON. Authenticated routes need
 | GET `/api/admin/campaigns` | | all drives (active, finished, ended) with progress |
 | POST `/api/admin/campaigns` | `name, description?, goalKg, endDate (yyyy-mm-dd)` | start a collection drive (notifies all users) |
 | POST `/api/admin/campaigns/{id}/end` | | end a drive |
+| GET `/api/admin/eco/challenges` | | list challenges with enrollment and completion counts |
+| POST `/api/admin/eco/challenges` | `title, description?, type, period, targetValue, rewardPoints` | create a 7-day weekly challenge or a monthly challenge running through the current month's last day |
+| POST `/api/admin/eco/challenges/{id}/end` | | end a challenge early |
 | GET `/api/admin/export` | | CSV of all items |
 
 Enums: categories `MOBILE TABLET LAPTOP DESKTOP TELEVISION APPLIANCE PRINTER BATTERY ACCESSORY OTHER`;
@@ -93,6 +104,8 @@ An open auction is transitioned to `CLOSED` when the next API request arrives at
 the amount must be positive and no less than the published minimum, and the proposed collection date cannot be in the past.
 Open, closed and awarded auctions reserve their item from the regular recycling queue and batch workflow. Cancelling an auction releases the item.
 Item lifecycle: `SUBMITTED → PICKUP_SCHEDULED → COLLECTED → (REFURBISHING →) LISTED → SOLD`, or `COLLECTED → QUEUED_RECYCLE → RECYCLED`; `SUBMITTED → REJECTED`.
+
+Eco challenge types are `DONATE_KG`, `DONATE_REUSABLE`, `VERIFIED_RECYCLING` and `COLLECTION_DRIVE`. Challenge progress is computed on the server from received item states, listed/sold reuse items, recycling batches and existing collection drives. Challenge bonus points are written to the regular user point balance and an append-only reward history; users cannot submit progress or award records. A reward is issued at most once per user/challenge. Milestones, enrollment, completion and newly earned achievements generate in-app notifications. Weekly and monthly leaderboards rank challenge bonus points only, not regular marketplace rewards.
 
 The decision report is rule-based, not an ML probability. `estimatedResaleValue` is the functional resale estimate (before repair); `resaleValueAsIs` applies the condition factor and `repairNetValue` subtracts repair cost. Omitted financial values are estimated from category/condition/age, category material fractions and the configured rates. `inputCompletenessPercent` and `qualityIndicator` describe known-input completeness only. `environmentalImpactEstimateKgCo2` uses `weight × Category.co2PerKg` once as an indicative category-factor estimate; it is not an avoided-emissions claim and is never added to realized analytics.
 

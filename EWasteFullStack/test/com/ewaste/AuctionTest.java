@@ -82,9 +82,11 @@ public class AuctionTest {
         } finally { migrated.close(); }
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path.toString());
              PreparedStatement query = connection.prepareStatement(
-                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('auctions','auction_bids','auction_history')");
+                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN "
+                             + "('auctions','auction_bids','auction_history','eco_challenges','challenge_enrollments',"
+                             + "'user_achievements','challenge_reward_history')");
              ResultSet result = query.executeQuery()) {
-            check("legacy SQLite database receives auction tables", result.next() && result.getInt(1) == 3);
+            check("legacy SQLite database receives additive auction and eco challenge tables", result.next() && result.getInt(1) == 7);
         }
     }
 

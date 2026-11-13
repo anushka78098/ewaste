@@ -33,6 +33,9 @@ public interface Repository extends AutoCloseable {
     List<Order> orders();
     MarketMessage addMarketMessage(MarketMessage message);
     List<MarketMessage> marketMessages();
+    SupportMessage addSupportMessage(SupportMessage message);
+    List<SupportMessage> supportMessages();
+    void saveSupportMessage(SupportMessage message);
 
     // notifications
     Notification addNotification(Notification n);
@@ -60,6 +63,20 @@ public interface Repository extends AutoCloseable {
     Campaign campaign(int id);
     List<Campaign> campaigns();
     void saveCampaign(Campaign c);
+
+    // eco challenges
+    EcoChallenge addEcoChallenge(EcoChallenge challenge);
+    EcoChallenge ecoChallenge(int id);
+    List<EcoChallenge> ecoChallenges();
+    void saveEcoChallenge(EcoChallenge challenge);
+    ChallengeEnrollment addChallengeEnrollment(ChallengeEnrollment enrollment);
+    ChallengeEnrollment challengeEnrollment(int challengeId, int userId);
+    List<ChallengeEnrollment> challengeEnrollments();
+    void saveChallengeEnrollment(ChallengeEnrollment enrollment);
+    Achievement addAchievement(Achievement achievement);
+    List<Achievement> achievements();
+    ChallengeReward addChallengeReward(ChallengeReward reward);
+    List<ChallengeReward> challengeRewards();
 
     /** Runs the work as one unit (a SQL transaction for databases). */
     <T> T atomic(Callable<T> work);

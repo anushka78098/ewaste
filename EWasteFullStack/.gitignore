@@ -1,3 +1,8 @@
 out/
 data/
 lib/*.jar
+.env
+.env.*
+!.env.example
+config/mail.properties
+config/decision.properties

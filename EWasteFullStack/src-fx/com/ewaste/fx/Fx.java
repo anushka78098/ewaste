@@ -20,7 +20,7 @@ import java.util.function.Function;
 public final class Fx {
     private Fx() {}
 
-    public static final String GREEN = "#2E7D32", GREEN_DARK = "#1B5E20", GREEN_LIGHT = "#E8F5E9", GREY = "#607D8B";
+    public static final String GREEN = "#2563EB", GREEN_DARK = "#1E3A5F", GREEN_LIGHT = "#EAF2FF", GREY = "#64748B";
 
     // ---- background calls ----------------------------------------------------------------------
     /** Runs the job off the UI thread, then calls ok on the UI thread. Errors are shown in a dialog. */
@@ -119,12 +119,26 @@ public final class Fx {
     public static Button button(String text, Runnable action) {
         Button b = new Button(text);
         b.setOnAction(e -> action.run());
+        b.setStyle("-fx-background-color:white;-fx-text-fill:" + GREEN_DARK
+                + ";-fx-border-color:#D7E2DA;-fx-border-radius:9;-fx-background-radius:9;"
+                + "-fx-padding:8 14 8 14;-fx-cursor:hand;");
+        b.setOnMouseEntered(e -> b.setStyle("-fx-background-color:#F0F6F1;-fx-text-fill:" + GREEN_DARK
+                + ";-fx-border-color:#A5C8AD;-fx-border-radius:9;-fx-background-radius:9;"
+                + "-fx-padding:8 14 8 14;-fx-cursor:hand;"));
+        b.setOnMouseExited(e -> b.setStyle("-fx-background-color:white;-fx-text-fill:" + GREEN_DARK
+                + ";-fx-border-color:#D7E2DA;-fx-border-radius:9;-fx-background-radius:9;"
+                + "-fx-padding:8 14 8 14;-fx-cursor:hand;"));
         return b;
     }
 
     public static Button primary(String text, Runnable action) {
         Button b = button(text, action);
-        b.setStyle("-fx-background-color:" + GREEN + ";-fx-text-fill:white;-fx-font-weight:bold;");
+        b.setStyle("-fx-background-color:" + GREEN + ";-fx-text-fill:white;-fx-font-weight:bold;"
+                + "-fx-background-radius:9;-fx-padding:9 16 9 16;-fx-cursor:hand;");
+        b.setOnMouseEntered(e -> b.setStyle("-fx-background-color:" + GREEN_DARK + ";-fx-text-fill:white;"
+                + "-fx-font-weight:bold;-fx-background-radius:9;-fx-padding:9 16 9 16;-fx-cursor:hand;"));
+        b.setOnMouseExited(e -> b.setStyle("-fx-background-color:" + GREEN + ";-fx-text-fill:white;"
+                + "-fx-font-weight:bold;-fx-background-radius:9;-fx-padding:9 16 9 16;-fx-cursor:hand;"));
         return b;
     }
 
@@ -173,29 +187,41 @@ public final class Fx {
 
     /** A card with a big number, a caption and an optional change line. */
     public static final class Kpi extends VBox {
-        private final Label value = new Label("-"), delta = new Label(" ");
+        private final Label value = new Label("-"), caption, delta = new Label(" ");
+        private String accentText = "#1E3A5F";
 
         public Kpi(String caption) {
             super(2);
-            setPadding(new Insets(10, 14, 10, 14));
-            setStyle("-fx-background-color:" + GREEN_LIGHT + ";-fx-border-color:#A5D6A7;");
+            this.caption = new Label(caption);
+            setPadding(new Insets(14, 16, 14, 16));
+            setStyle("-fx-background-color:white;-fx-border-color:#D8E1EC;-fx-border-radius:12;"
+                    + "-fx-background-radius:12;-fx-effect:dropshadow(gaussian, rgba(20,50,35,0.08), 12, 0, 0, 3);");
             value.setStyle("-fx-font-size:22px;-fx-font-weight:bold;-fx-text-fill:" + GREEN_DARK + ";");
-            Label c = new Label(caption);
-            c.setStyle("-fx-text-fill:" + GREY + ";");
-            getChildren().addAll(value, c, delta);
+            this.caption.setStyle("-fx-text-fill:" + GREY + ";");
+            delta.setStyle("-fx-text-fill:" + GREY + ";");
+            getChildren().addAll(value, this.caption, delta);
             setMaxWidth(Double.MAX_VALUE);
+        }
+
+        public void setAccent(String start, String end, String textColor) {
+            accentText = textColor;
+            setStyle("-fx-background-color:linear-gradient(to right," + start + "," + end + ");"
+                    + "-fx-background-radius:12;-fx-effect:dropshadow(gaussian, rgba(20,50,35,0.12), 12, 0, 0, 3);");
+            value.setStyle("-fx-font-size:22px;-fx-font-weight:bold;-fx-text-fill:" + textColor + ";");
+            caption.setStyle("-fx-text-fill:" + textColor + ";");
+            delta.setStyle("-fx-text-fill:" + textColor + ";");
         }
 
         public void set(String text) { value.setText(text); delta.setText(" "); }
 
         public void set(String text, double current, double previous, int days) {
             value.setText(text);
-            if (previous <= 0 && current <= 0) { delta.setText("no activity"); delta.setStyle("-fx-text-fill:" + GREY + ";"); return; }
-            if (previous <= 0) { delta.setText("new vs previous " + days + " days"); delta.setStyle("-fx-text-fill:#2E7D32;"); return; }
+            if (previous <= 0 && current <= 0) { delta.setText("no activity"); delta.setStyle("-fx-text-fill:" + accentText + ";"); return; }
+            if (previous <= 0) { delta.setText("new vs previous " + days + " days"); delta.setStyle("-fx-text-fill:" + accentText + ";"); return; }
             double pct = (current - previous) / previous * 100.0;
             String arrow = pct > 0.5 ? "▲ " : pct < -0.5 ? "▼ " : "= ";
             delta.setText(String.format("%s%+.0f%% vs previous %d days", arrow, pct, days));
-            delta.setStyle("-fx-text-fill:" + (pct > 0.5 ? "#2E7D32" : pct < -0.5 ? "#C62828" : GREY) + ";");
+            delta.setStyle("-fx-text-fill:" + accentText + ";");
         }
     }
 

@@ -12,6 +12,10 @@ java -cp "out;lib/*" com.ewaste.DashboardTest
 if errorlevel 1 exit /b 1
 java -cp "out;lib/*" com.ewaste.DecisionEngineTest
 if errorlevel 1 exit /b 1
+java -cp "out;lib/*" com.ewaste.EcoChallengeTest
+if errorlevel 1 exit /b 1
+java -cp "out;lib/*" com.ewaste.LoginModeTest
+if errorlevel 1 exit /b 1
 java -cp "out;lib/*" com.ewaste.server.ThrottleTest
 if errorlevel 1 exit /b 1
 if exist lib\sqlite-jdbc-3.36.0.3.jar (

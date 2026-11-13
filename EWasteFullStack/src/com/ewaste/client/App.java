@@ -11,7 +11,7 @@ public class App {
     public Map<String, Object> meta;
     /** Set by the main frame: refreshes the header (points, unread notifications). */
     public Runnable refreshHeader = () -> { };
-    /** Set by the main frame: switches to the tab with the given title (used by dashboard alerts). */
+    /** Set by the main frame: switches to the page with the given title (used by dashboard alerts). */
     public java.util.function.Consumer<String> goTo = t -> { };
     public BiConsumer<Integer, Integer> openConversation = (listingId, otherUserId) -> { };
 

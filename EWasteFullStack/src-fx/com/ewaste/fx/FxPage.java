@@ -5,7 +5,7 @@ import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.layout.*;
 
-/** One tab of the main window. refresh() reloads its data from the server. */
+/** One page of the main window. refresh() reloads its data from the server. */
 abstract class FxPage extends BorderPane {
     final App app;
     final String title;
@@ -14,6 +14,7 @@ abstract class FxPage extends BorderPane {
         this.app = app;
         this.title = title;
         setPadding(new Insets(12));
+        setStyle("-fx-background-color:#F4F7FB;");
     }
 
     abstract void refresh();

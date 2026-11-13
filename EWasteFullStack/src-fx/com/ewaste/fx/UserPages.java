@@ -20,8 +20,137 @@ final class UserPages {
 
     static List<FxPage> create(App app) {
         return Arrays.asList(new FxDashboards.User(app), new FxMarketPages.Dashboard(app, false), new FxMarketPages.Dashboard(app, true),
-                new Submit(app), new MyItems(app), new Market(app), new FxMarketPages.Messages(app), new Orders(app),
-                new Notifications(app), new Impact(app), new Profile(app));
+                new Submit(app), new MyItems(app), new Market(app), new FxMarketPages.Messages(app), new FxSupportPage(app, false), new Orders(app),
+                new EcoChallenges(app, false), new Notifications(app), new Impact(app), new Profile(app));
+    }
+
+    // ---- eco challenges -------------------------------------------------------------------------
+    static final class EcoChallenges extends FxPage {
+        private final boolean admin;
+        private final VBox cards = new VBox(8);
+        private final VBox badges = new VBox(6);
+        private final ComboBox<String> period = new ComboBox<>();
+        private final Fx.Grid leaderboard = new Fx.Grid().col("Rank", m -> m.get("rank")).key("Participant", "name")
+                .col("Bonus points", m -> m.get("points")).col("Challenges", m -> m.get("completedChallenges"));
+        private Map<String, Object> userData;
+
+        EcoChallenges(App app, boolean admin) {
+            super(app, "Eco challenges");
+            this.admin = admin;
+            period.getItems().addAll("WEEKLY", "MONTHLY");
+            period.setValue("WEEKLY");
+            period.setOnAction(e -> loadLeaderboard());
+
+            ScrollPane challengeScroll = new ScrollPane(cards);
+            challengeScroll.setFitToWidth(true);
+            VBox left = new VBox(8, Fx.heading(admin ? "Manage eco challenges" : "Join an eco challenge"), challengeScroll);
+            VBox right = new VBox(8);
+            if (!admin) right.getChildren().addAll(Fx.heading("Achievements"), badges);
+            right.getChildren().addAll(Fx.heading("Challenge leaderboard"), new HBox(8, Fx.muted("Period"), period), leaderboard);
+            SplitPane split = new SplitPane(left, right);
+            split.setDividerPositions(0.58);
+            setTop(header("Eco challenges", Fx.button("Refresh", this::refresh),
+                    admin ? Fx.primary("Create challenge...", this::createChallenge) : Fx.muted("Earn bonus points by completing verified activities.")));
+            setCenter(split);
+        }
+
+        @Override void refresh() {
+            String path = admin ? "/api/admin/eco/challenges" : "/api/eco/challenges";
+            Fx.run(() -> admin ? ApiClient.list(app.api.get(path)) : ApiClient.obj(app.api.get(path)), result -> {
+                if (admin) renderCards(ApiClient.list(result));
+                else {
+                    Map<String, Object> data = ApiClient.obj(result);
+                    userData = data;
+                    renderCards(ApiClient.list(data.get("challenges")));
+                    renderBadges(ApiClient.list(data.get("achievements")));
+                    showLeaderboard(data);
+                }
+                if (admin) loadLeaderboard();
+            });
+        }
+
+        private void renderCards(List<Map<String, Object>> challenges) {
+            cards.getChildren().clear();
+            if (challenges.isEmpty()) cards.getChildren().add(Fx.muted("No eco challenges are available right now."));
+            for (Map<String, Object> challenge : challenges) {
+                Label title = Fx.heading(Ui.s(challenge.get("title")) + "  -  " + Ui.s(challenge.get("period"))
+                        + "  |  +" + challenge.get("rewardPoints") + " points");
+                Label detail = Fx.muted(Ui.s(challenge.get("description")) + "  |  "
+                        + Ui.s(challenge.get("targetDescription")) + "  |  ends " + Ui.s(challenge.get("endDate"))
+                        + "  |  " + Ui.s(challenge.get("status")));
+                ProgressBar progress = new ProgressBar(Math.max(0, Math.min(1, Ui.d(challenge.get("percent")) / 100.0)));
+                progress.setMaxWidth(Double.MAX_VALUE);
+                Label value = Fx.muted(String.format("%.1f / %.1f", Ui.d(challenge.get("progress")), Ui.d(challenge.get("targetValue"))));
+                HBox actions = new HBox(8);
+                if (Boolean.TRUE.equals(challenge.get("canEnroll"))) {
+                    actions.getChildren().add(Fx.primary("Join challenge", () -> enroll(challenge)));
+                } else if (admin && "ACTIVE".equals(challenge.get("status"))) {
+                    actions.getChildren().add(Fx.button("End early", () -> endChallenge(challenge)));
+                } else if (admin) {
+                    actions.getChildren().add(Fx.muted(challenge.get("enrollmentCount") + " enrolled / "
+                            + challenge.get("completionCount") + " completed"));
+                } else if (Boolean.TRUE.equals(challenge.get("enrolled"))) {
+                    actions.getChildren().add(Fx.muted("Enrolled"));
+                }
+                VBox card = new VBox(6, title, detail, progress, value, actions);
+                card.setPadding(new Insets(10));
+                card.setStyle("-fx-background-color:#F1F8E9;-fx-border-color:#B7D7B9;-fx-border-radius:4;");
+                cards.getChildren().add(card);
+            }
+        }
+
+        private void renderBadges(List<Map<String, Object>> earned) {
+            badges.getChildren().clear();
+            if (earned.isEmpty()) badges.getChildren().add(Fx.muted("No achievements earned yet."));
+            for (Map<String, Object> badge : earned)
+                badges.getChildren().add(Fx.muted("★  " + Ui.s(badge.get("label")) + " - " + Ui.s(badge.get("description"))));
+        }
+
+        private void showLeaderboard(Map<String, Object> data) {
+            String key = "MONTHLY".equals(period.getValue()) ? "monthlyLeaderboard" : "weeklyLeaderboard";
+            leaderboard.setRows(ApiClient.list(data.get(key)));
+        }
+
+        private void loadLeaderboard() {
+            if (!admin) {
+                if (userData != null) showLeaderboard(userData);
+                return;
+            }
+            Fx.run(() -> ApiClient.list(app.api.get("/api/eco/leaderboard?period=" + period.getValue())), leaderboard::setRows);
+        }
+
+        private void enroll(Map<String, Object> challenge) {
+            Fx.run(() -> app.api.post("/api/eco/challenges/" + challenge.get("id") + "/enroll", ApiClient.map()),
+                    result -> refresh());
+        }
+
+        private void createChallenge() {
+            TextField title = new TextField(), description = new TextField();
+            ComboBox<String> type = new ComboBox<>();
+            type.getItems().addAll("DONATE_KG", "DONATE_REUSABLE", "VERIFIED_RECYCLING", "COLLECTION_DRIVE");
+            type.setValue("DONATE_KG");
+            ComboBox<String> cadence = new ComboBox<>();
+            cadence.getItems().addAll("WEEKLY", "MONTHLY");
+            cadence.setValue("WEEKLY");
+            TextField target = new TextField("5"), points = new TextField("100");
+            if (!Fx.dialog("Create eco challenge", Fx.form("Title *", title, "Description", description,
+                    "Type", type, "Cadence", cadence, "Target *", target, "Bonus points *", points))) return;
+            try {
+                Map<String, Object> body = ApiClient.map("title", title.getText().trim(), "description", description.getText().trim(),
+                        "type", type.getValue(), "period", cadence.getValue(),
+                        "targetValue", Double.parseDouble(target.getText().trim()),
+                        "rewardPoints", Integer.parseInt(points.getText().trim()));
+                Fx.run(() -> app.api.post("/api/admin/eco/challenges", body), result -> refresh());
+            } catch (NumberFormatException e) {
+                Fx.info("Target and bonus points must be valid numbers.");
+            }
+        }
+
+        private void endChallenge(Map<String, Object> challenge) {
+            if (Fx.confirm("End \"" + challenge.get("title") + "\" now?"))
+                Fx.run(() -> app.api.post("/api/admin/eco/challenges/" + challenge.get("id") + "/end", ApiClient.map()),
+                        result -> refresh());
+        }
     }
 
     // ---- submit ---------------------------------------------------------------------------------

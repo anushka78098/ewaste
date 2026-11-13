@@ -15,8 +15,8 @@ public class DashboardPage extends Page {
     private final JComboBox<String> period = new JComboBox<>(new String[]{"Last 7 days", "Last 30 days", "Last 90 days", "Last 180 days"});
     private static final int[] DAYS = {7, 30, 90, 180};
     private final JPanel alerts = new JPanel();
-    private final KpiCard kSubmitted = new KpiCard("items submitted"), kKg = new KpiCard("e-waste submitted"),
-            kRevenue = new KpiCard("market revenue"), kRecycled = new KpiCard("recycled"), kCo2 = new KpiCard("CO2 avoided");
+    private final KpiCard kSubmitted = new KpiCard("items submitted", 0), kKg = new KpiCard("e-waste submitted", 1),
+            kRevenue = new KpiCard("market revenue", 2), kRecycled = new KpiCard("recycled", 3), kCo2 = new KpiCard("CO2 avoided", 4);
     private final JLabel totals = new JLabel(" ");
     private final BarChart submitted = new BarChart("Items submitted");
     private final LineChart revenue = new LineChart("Market revenue ($)");

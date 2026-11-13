@@ -7,12 +7,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Dependency-free repository. Data lives in memory and is written to a snapshot file (Java
  * serialization) after every atomic block. Used when the SQLite driver is not installed, and by tests.
  */
 public class MemoryRepository implements Repository {
+    private static final Logger LOGGER = Logger.getLogger(MemoryRepository.class.getName());
+
     private static class Snapshot implements Serializable {
         private static final long serialVersionUID = 1L;
         int seq = 0;
@@ -21,12 +25,17 @@ public class MemoryRepository implements Repository {
         final Map<Integer, Listing> listings = new LinkedHashMap<>();
         final List<Order> orders = new ArrayList<>();
         List<MarketMessage> marketMessages = new ArrayList<>();
+        Map<Integer, SupportMessage> supportMessages = new LinkedHashMap<>();
         final Map<Integer, Notification> notifications = new LinkedHashMap<>();
         final List<RecyclingBatch> batches = new ArrayList<>();
         Map<Integer, Campaign> campaigns = new LinkedHashMap<>();   // not final: absent in snapshots written by older versions
         Map<Integer, Auction> auctions = new LinkedHashMap<>();
         Map<Integer, AuctionBid> auctionBids = new LinkedHashMap<>();
         List<AuctionHistoryEntry> auctionHistory = new ArrayList<>();
+        Map<Integer, EcoChallenge> ecoChallenges = new LinkedHashMap<>();
+        Map<Integer, ChallengeEnrollment> challengeEnrollments = new LinkedHashMap<>();
+        Map<Integer, Achievement> achievements = new LinkedHashMap<>();
+        Map<Integer, ChallengeReward> challengeRewards = new LinkedHashMap<>();
     }
 
     private Snapshot d = new Snapshot();
@@ -41,11 +50,16 @@ public class MemoryRepository implements Repository {
                 d = (Snapshot) in.readObject();
                 if (d.campaigns == null) d.campaigns = new LinkedHashMap<>();
                 if (d.marketMessages == null) d.marketMessages = new ArrayList<>();
+                if (d.supportMessages == null) d.supportMessages = new LinkedHashMap<>();
                 if (d.auctions == null) d.auctions = new LinkedHashMap<>();
                 if (d.auctionBids == null) d.auctionBids = new LinkedHashMap<>();
                 if (d.auctionHistory == null) d.auctionHistory = new ArrayList<>();
+                if (d.ecoChallenges == null) d.ecoChallenges = new LinkedHashMap<>();
+                if (d.challengeEnrollments == null) d.challengeEnrollments = new LinkedHashMap<>();
+                if (d.achievements == null) d.achievements = new LinkedHashMap<>();
+                if (d.challengeRewards == null) d.challengeRewards = new LinkedHashMap<>();
             } catch (Exception e) {
-                System.err.println("Could not read snapshot " + file + ": " + e.getMessage() + " - starting empty.");
+                LOGGER.log(Level.WARNING, "Could not read snapshot " + file + "; starting with an empty store.", e);
             }
         }
     }
@@ -116,6 +130,19 @@ public class MemoryRepository implements Repository {
         MarketMessage c = copy(message); c.id = ++d.seq; d.marketMessages.add(c); dirty = true; message.id = c.id; return copy(c);
     }
     @Override public List<MarketMessage> marketMessages() { return copies(d.marketMessages); }
+    @Override public SupportMessage addSupportMessage(SupportMessage message) {
+        SupportMessage copy = copy(message);
+        copy.id = ++d.seq;
+        d.supportMessages.put(copy.id, copy);
+        dirty = true;
+        message.id = copy.id;
+        return copy(copy);
+    }
+    @Override public List<SupportMessage> supportMessages() { return copies(d.supportMessages.values()); }
+    @Override public void saveSupportMessage(SupportMessage message) {
+        d.supportMessages.put(message.id, copy(message));
+        dirty = true;
+    }
 
     // ---- notifications
     @Override public Notification addNotification(Notification n) {
@@ -168,6 +195,43 @@ public class MemoryRepository implements Repository {
     @Override public List<Campaign> campaigns() { return copies(d.campaigns.values()); }
     @Override public void saveCampaign(Campaign c) { d.campaigns.put(c.id, copy(c)); dirty = true; }
 
+    // ---- eco challenges
+    @Override public EcoChallenge addEcoChallenge(EcoChallenge challenge) {
+        EcoChallenge c = copy(challenge); c.id = ++d.seq; d.ecoChallenges.put(c.id, c); dirty = true; challenge.id = c.id; return copy(c);
+    }
+    @Override public EcoChallenge ecoChallenge(int id) { return copy(d.ecoChallenges.get(id)); }
+    @Override public List<EcoChallenge> ecoChallenges() { return copies(d.ecoChallenges.values()); }
+    @Override public void saveEcoChallenge(EcoChallenge challenge) { d.ecoChallenges.put(challenge.id, copy(challenge)); dirty = true; }
+    @Override public ChallengeEnrollment addChallengeEnrollment(ChallengeEnrollment enrollment) {
+        for (ChallengeEnrollment existing : d.challengeEnrollments.values())
+            if (existing.challengeId == enrollment.challengeId && existing.userId == enrollment.userId)
+                throw new IllegalArgumentException("You are already enrolled in this challenge.");
+        ChallengeEnrollment e = copy(enrollment); e.id = ++d.seq; d.challengeEnrollments.put(e.id, e); dirty = true; enrollment.id = e.id; return copy(e);
+    }
+    @Override public ChallengeEnrollment challengeEnrollment(int challengeId, int userId) {
+        for (ChallengeEnrollment e : d.challengeEnrollments.values())
+            if (e.challengeId == challengeId && e.userId == userId) return copy(e);
+        return null;
+    }
+    @Override public List<ChallengeEnrollment> challengeEnrollments() { return copies(d.challengeEnrollments.values()); }
+    @Override public void saveChallengeEnrollment(ChallengeEnrollment enrollment) {
+        d.challengeEnrollments.put(enrollment.id, copy(enrollment)); dirty = true;
+    }
+    @Override public Achievement addAchievement(Achievement achievement) {
+        for (Achievement existing : d.achievements.values())
+            if (existing.userId == achievement.userId && existing.key.equals(achievement.key))
+                throw new IllegalArgumentException("Achievement has already been awarded.");
+        Achievement a = copy(achievement); a.id = ++d.seq; d.achievements.put(a.id, a); dirty = true; achievement.id = a.id; return copy(a);
+    }
+    @Override public List<Achievement> achievements() { return copies(d.achievements.values()); }
+    @Override public ChallengeReward addChallengeReward(ChallengeReward reward) {
+        for (ChallengeReward existing : d.challengeRewards.values())
+            if (existing.challengeId == reward.challengeId && existing.userId == reward.userId)
+                throw new IllegalArgumentException("Challenge reward has already been awarded.");
+        ChallengeReward r = copy(reward); r.id = ++d.seq; d.challengeRewards.put(r.id, r); dirty = true; reward.id = r.id; return copy(r);
+    }
+    @Override public List<ChallengeReward> challengeRewards() { return copies(d.challengeRewards.values()); }
+
     @Override public <T> T atomic(Callable<T> work) {
         try {
             T r = work.call();
@@ -191,7 +255,8 @@ public class MemoryRepository implements Repository {
             Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             dirty = false;
         } catch (IOException e) {
-            System.err.println("Warning: could not save snapshot: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Could not save snapshot file " + file, e);
+            throw new IllegalStateException("Could not save snapshot file " + file, e);
         }
     }
 

@@ -11,24 +11,36 @@ import java.util.function.Consumer;
 public final class Ui {
     private Ui() {}
 
-    public static final Color GREEN = new Color(0x2E7D32);
-    public static final Color GREEN_DARK = new Color(0x1B5E20);
-    public static final Color GREEN_LIGHT = new Color(0xE8F5E9);
-    public static final Color GREY_TEXT = new Color(0x607D8B);
+    public static final Color GREEN = new Color(0x2563EB);
+    public static final Color GREEN_DARK = new Color(0x1E3A5F);
+    public static final Color GREEN_LIGHT = new Color(0xEAF2FF);
+    public static final Color GREY_TEXT = new Color(0x64748B);
+    public static final Color APP_BACKGROUND = new Color(0xF4F7FB);
+    public static final Color SURFACE = Color.WHITE;
+    public static final Color BORDER = new Color(0xE2E9E4);
 
     public static void installLookAndFeel() {
         try {
             for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
                 if ("Nimbus".equals(info.getName())) {
-                    UIManager.put("nimbusBase", new Color(0x2E7D32));
-                    UIManager.put("nimbusBlueGrey", new Color(0x8FAF91));
-                    UIManager.put("nimbusFocus", new Color(0x66BB6A));
-                    UIManager.put("nimbusSelectionBackground", new Color(0x43A047));
+                    UIManager.put("nimbusBase", new Color(0x174A7E));
+                    UIManager.put("nimbusBlueGrey", new Color(0xEEF2F7));
+                    UIManager.put("nimbusFocus", new Color(0x39B8D5));
+                    UIManager.put("nimbusSelectionBackground", new Color(0x246DB2));
                     UIManager.setLookAndFeel(info.getClassName());
                     break;
                 }
             }
         } catch (Exception ignored) { }
+        UIManager.put("control", APP_BACKGROUND);
+        UIManager.put("Panel.background", SURFACE);
+        UIManager.put("ScrollPane.background", APP_BACKGROUND);
+        UIManager.put("Table.background", SURFACE);
+        UIManager.put("Table.alternateRowColor", new Color(0xF7FAF8));
+        UIManager.put("Table.selectionBackground", GREEN_LIGHT);
+        UIManager.put("Table.selectionForeground", GREEN_DARK);
+        UIManager.put("TableHeader.background", new Color(0xEEF3EF));
+        UIManager.put("TableHeader.foreground", GREEN_DARK);
         Font f = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
         for (Object key : UIManager.getDefaults().keySet().toArray()) {
             Object v = UIManager.get(key);
@@ -163,6 +175,8 @@ public final class Ui {
     public static JButton button(String text, Runnable action) {
         JButton b = new JButton(text);
         b.addActionListener(e -> action.run());
+        b.setFocusPainted(false);
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         return b;
     }
 
@@ -171,6 +185,13 @@ public final class Ui {
         b.setBackground(GREEN);
         b.setForeground(Color.WHITE);
         b.setFont(b.getFont().deriveFont(Font.BOLD));
+        b.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
+        b.setFocusPainted(false);
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        b.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(GREEN_DARK); }
+            @Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(GREEN); }
+        });
         return b;
     }
 
@@ -200,9 +221,9 @@ public final class Ui {
     /** A small "stat card": big value over a small caption. */
     public static JPanel card(String caption, JLabel value) {
         JPanel p = new JPanel(new BorderLayout());
-        p.setBackground(GREEN_LIGHT);
-        p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(0xA5D6A7)),
-                BorderFactory.createEmptyBorder(10, 14, 10, 14)));
+        p.setBackground(SURFACE);
+        p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER),
+                BorderFactory.createEmptyBorder(12, 16, 12, 16)));
         value.setFont(value.getFont().deriveFont(Font.BOLD, 20f));
         value.setForeground(GREEN_DARK);
         JLabel c = new JLabel(caption);

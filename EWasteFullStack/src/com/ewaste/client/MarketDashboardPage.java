@@ -17,16 +17,16 @@ public class MarketDashboardPage extends Page {
         super(app, sellerView ? "Seller dashboard" : "Buyer dashboard");
         this.sellerView = sellerView;
         if (sellerView) {
-            first = new KpiCard("active listings");
-            second = new KpiCard("items sold");
-            third = new KpiCard("sales to date");
+            first = new KpiCard("active listings", 0);
+            second = new KpiCard("items sold", 1);
+            third = new KpiCard("sales to date", 2);
             table = new MapTable(num("Listing", m -> m.get("listingId")), key("Item", "itemName"),
                     num("Price", m -> Ui.money(m.get("price"))), col("Status", m -> Boolean.TRUE.equals(m.get("active")) ? "Listed" : Boolean.TRUE.equals(m.get("sold")) ? "Sold" : "Closed"));
             add(top("Your donated items for sale", Ui.button("Upload photo...", this::uploadPhoto), Ui.button("Refresh", this::refresh)), BorderLayout.NORTH);
         } else {
-            first = new KpiCard("orders placed");
-            second = new KpiCard("total spent");
-            third = new KpiCard("market savings");
+            first = new KpiCard("orders placed", 0);
+            second = new KpiCard("total spent", 1);
+            third = new KpiCard("market savings", 2);
             table = new MapTable(num("Order", m -> m.get("orderId")), key("Item", "itemName"), key("Seller", "sellerName"),
                     num("Paid", m -> Ui.money(m.get("amountPaid"))), col("Date", m -> Ui.date(m.get("createdAt"))));
             add(top("Your marketplace purchases", Ui.button("Refresh", this::refresh)), BorderLayout.NORTH);

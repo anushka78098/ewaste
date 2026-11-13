@@ -13,10 +13,12 @@ notifications, reward points, dashboards and optional emails.
 ```
 
 * **Two desktop clients, same backend:** a **Swing** client (`src/.../client`, Java2D charts) and a **JavaFX** client (`src-fx`, built-in charts). Both offer every screen.
+* **Updated workspace design:** role-aware blue side navigation, active-page feedback, live account indicators and colorful KPI cards across both clients.
 * **Backend:** REST API on the JDK's built-in HTTP server, salted password hashes, token sessions, login lockout.
 * **Database:** SQLite through JDBC (one driver jar, installed by a script) - or a file-backed store if you skip it.
 * **Email:** optional notifications through any SMTP server, written in pure Java.
 * **Marketplace demo:** on a fresh install, the server creates 100 reusable demo listings. Buyers and item donors have separate marketplace dashboards; donors can add listing photos and buyers can message donors with image/PDF attachments.
+* **Private admin support:** users and recyclers can contact administrators through a private support inbox, separate from listing-based buyer/seller messages.
 * **Circularity Passport:** every marketplace item has a public, shareable product passport with an explainable 0-100 circularity score, modeled CO2 impact, estimated material composition, and a privacy-safe lifecycle timeline.
 * **Recycler reverse auctions:** admins can auction collected recycling-plan items to registered recyclers, compare bids and award a recycler; audit history, bid notifications and the existing recycling queue are integrated.
 * **Explainable decision reports:** category/age/condition-based estimates compare reuse, repair-and-reuse, recycling and hazardous disposal, with transparent financial and environmental estimates and configurable category thresholds.
@@ -43,7 +45,7 @@ end-to-end verification; see section 8.
 ./run-server.sh                       .\run-server.bat              # terminal 1: backend on http://localhost:8080
 ./run-client.sh                       .\run-client.bat              # terminal 2: Swing desktop app (start several to log in as different users)
 ```
-Sign in as **admin / admin123** (you will be nagged on the dashboard to change it), or press *Create account...* to register a user.
+Choose **Admin**, **Seller**, or **Buyer** in the login mode selector. Admin mode requires the protected admin account; Seller and Buyer are modes for the same regular account and open the matching dashboard (both marketplace functions remain available). Recycler accounts can select **Recycler** to open recycler tools. Sign in as **admin / admin123** (you will be nagged on the dashboard to change it), or press *Create account...* to register a user.
 *Track an item...* on the sign-in window needs no account.
 
 If you skip `setup-sqlite`, the server still runs on a file-backed store (`data/ewaste.snapshot`) and says so at startup. Once the driver
@@ -69,7 +71,7 @@ If `build-fx` reports a compile error, it will name the file and line - the clie
 2. Admin: **Dashboard** shows "Needs attention" (click to jump to the tab). **Review submissions** → *Approve...* (plan + pickup date) or *Reject...*.
 3. Admin: **Pickups & stock** → *Mark collected* (owner earns points) → *Start repair / Repair done* → *Publish to market*.
 4. Admin: **Recycling** → *Queue all* → *Ship regular batch* / *Ship hazardous batch* (batteries only go to a certified partner).
-5. Another user: **Market** → *Circularity passport...*, *Message seller...*, or *Buy*, redeeming points. The passport shows the item's score breakdown, material/CO2 estimates, and journey without revealing user details. **Buyer dashboard** tracks purchases; **Seller dashboard** summarizes donated items sold and supports listing photos. Messages support PNG/JPEG/PDF attachments. **My dashboard** shows tier progress, badges, charts, CO2 equivalents; *Save impact certificate...* writes a printable HTML file.
+5. Another user: **Market** → *Circularity passport...*, *Message seller...*, or *Buy*, redeeming points. The passport shows the item's score breakdown, material/CO2 estimates, and journey without revealing user details. **Buyer dashboard** tracks purchases; **Seller dashboard** summarizes donated items sold and supports listing photos. Messages support PNG/JPEG/PDF attachments. Use **Help & support** to message administrators privately; admins can read and reply from **Support inbox**. **My dashboard** shows tier progress, badges, charts, CO2 equivalents; *Save impact certificate...* writes a printable HTML file.
 6. Admin: **Drives** → *New drive...* (goal in kg; every user is notified and sees progress). **Announcements & email** broadcasts messages.
 7. Admin: **Users** → *Toggle recycler role* to grant a registered account recycler access. Admin: **Recycler auctions** → publish a collected recycling item with a minimum bid and closing time. Recycler: **Recycler auctions** → submit one bid with a proposed collection date and recycling method. Admins compare bids and award one; bidders receive the result in notifications.
 
@@ -81,6 +83,7 @@ If `build-fx` reports a compile error, it will name the file and line - the clie
 | Market | search, public Circularity Passport, message sellers with file attachments, buy, pay with points (max 30% off), orders, buyer dashboard | seller dashboard, listing photos, price-drop and new-listing alerts |
 | Recycling | - | queue, ship regular or certified-hazardous batches, materials + CO2 per batch |
 | **Recycler auctions** | submit bids, view own result and auction closing/status | publish eligible items, compare bids, award/cancel auctions, view audit history and winning bid |
+| **Support** | private conversation with administrators | inbox, unread counts, and private replies |
 | **Dashboards** | tier (Bronze...Platinum), 8 badges, pipeline, monthly kg, CO2 equivalents, drives, certificate | alerts, KPIs vs previous period (7/30/90/180 days), trend + breakdown charts, funnel, top donors |
 | **Drives** | see active drives with progress | create / end collection drives with a kg goal |
 | Updates | notification inbox, optional emails | announcements (in-app + email), email status + test |
@@ -119,6 +122,8 @@ Then point the DNS A record of your domain at the server, open ports 80/443, and
 **Clients**: `./scripts/package.sh` gives `ewaste-client.jar` (double-click / `java -jar`); `./scripts/make-installer.sh` (or `.bat` on Windows) builds a native
 installer with `jpackage` for the OS you run it on. The clients are desktop apps, so each user installs one and points it at your server URL.
 
+New to GitHub or deployment? Follow the [beginner Windows guide](docs/GITHUB_AND_DEPLOY.md) for copy-paste steps to test, push changes, deploy the server, and connect your desktop client.
+
 ## 7. Project layout
 ```
 src/com/ewaste/
@@ -128,7 +133,7 @@ src/com/ewaste/
     service/   Auth, Item, Market, Recycling, Notification, Report, DecisionEngine, Tracking, CampaignService, AnalyticsService
     mail/      Mailer, SmtpMailer (pure-Java SMTP client), MailConfig
     repo/      Repository + SqliteRepository (JDBC) + MemoryRepository (file-backed fallback / tests)
-  client/      Swing: ApiClient, LoginFrame, MainFrame, one Page per tab; charts/ = Java2D bar, line, donut, horizontal bar, meter
+  client/      Swing: ApiClient, LoginFrame, MainFrame, one navigable Page per screen; charts/ = Java2D bar, line, donut, horizontal bar, meter
 src-fx/com/ewaste/fx/   JavaFX: FxMain (login + tracker), MainView, UserPages, AdminPages, FxDashboards, Charts, Fx helpers
 test/        ApiTest, DashboardTest, MailTest (+FakeSmtpServer), GuiSmoke (opens every Swing window), ThrottleTest
 deploy/      Caddyfile, nginx.conf, ewaste.service, .env.example      Dockerfile, docker-compose.yml

@@ -3,7 +3,7 @@ package com.ewaste.client;
 import javax.swing.*;
 import java.awt.*;
 
-/** One tab of the main window. refresh() reloads its data from the server. */
+/** One page of the main window. refresh() reloads its data from the server. */
 public abstract class Page extends JPanel {
     protected final App app;
     private final String title;
@@ -12,7 +12,8 @@ public abstract class Page extends JPanel {
         super(new BorderLayout(8, 8));
         this.app = app;
         this.title = title;
-        setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        setBackground(new Color(0xF4F7FB));
+        setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));
     }
 
     public String title() { return title; }

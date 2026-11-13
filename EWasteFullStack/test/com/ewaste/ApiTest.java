@@ -2,6 +2,7 @@ package com.ewaste;
 
 import com.ewaste.client.ApiClient;
 import com.ewaste.client.ApiClient.ApiException;
+import com.ewaste.model.User;
 import com.ewaste.server.ServerMain;
 import com.ewaste.server.DemoData;
 import com.ewaste.server.repo.MemoryRepository;
@@ -12,6 +13,8 @@ import com.sun.net.httpserver.HttpServer;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
@@ -40,6 +43,20 @@ public class ApiTest {
         check("fresh installation seeds 100 marketplace listings", DemoData.seedMarketplaceIfEmpty(demo) == 100
                 && demo.listings().size() == 100 && DemoData.seedMarketplaceIfEmpty(demo) == 0);
         demo.close();
+        Path blockedParent = Files.createTempFile("ewaste-snapshot-blocker", ".tmp");
+        try {
+            MemoryRepository fileRepo = new MemoryRepository(blockedParent.resolve("snapshot"));
+            User user = new User();
+            user.username = "snapshot-test";
+            boolean writeFailureReported = false;
+            try { fileRepo.atomic(() -> fileRepo.addUser(user)); }
+            catch (IllegalStateException e) {
+                writeFailureReported = e.getMessage() != null && e.getMessage().contains("Could not save snapshot file");
+            }
+            check("snapshot write failures are surfaced", writeFailureReported);
+        } finally {
+            Files.deleteIfExists(blockedParent);
+        }
         Repository repo = args.length > 0 && args[0].equals("sqlite")
                 ? new com.ewaste.server.repo.SqliteRepository(java.nio.file.Files.createTempFile("ewaste", ".db").toString())
                 : new MemoryRepository(null);
@@ -93,6 +110,56 @@ public class ApiTest {
         check("user cannot reach admin api -> 403", statusOf(() -> alice.get("/api/admin/stats")) == 403);
         check("password not leaked", !alice.getText("/api/me").toLowerCase().contains("hash"));
 
+        System.out.println("Admin support inbox");
+        int aliceId = ((Number) obj(alice.get("/api/me")).get("id")).intValue();
+        int supportBobId = ((Number) obj(bob.get("/api/me")).get("id")).intValue();
+        int adminUnreadBeforeSupport = ((Number) obj(admin.get("/api/me")).get("unread")).intValue();
+        check("support inbox is private to admins", statusOf(() -> alice.get("/api/admin/support")) == 403);
+        check("user can start a private support conversation",
+                "I need help with my item.".equals(obj(alice.post("/api/me/support",
+                        map("text", "  I need help with my item.  "))).get("text")));
+        check("new support messages notify admins",
+                ((Number) obj(admin.get("/api/me")).get("unread")).intValue() == adminUnreadBeforeSupport + 1);
+        check("other users cannot see the conversation", list(bob.get("/api/me/support")).isEmpty());
+        List<Map<String, Object>> supportInbox = list(admin.get("/api/admin/support"));
+        Map<String, Object> aliceSupport = null;
+        for (Map<String, Object> row : supportInbox)
+            if (((Number) row.get("userId")).intValue() == aliceId) aliceSupport = row;
+        check("admin inbox shows sender and unread count", aliceSupport != null
+                && ((Number) aliceSupport.get("unread")).intValue() == 1
+                && Boolean.TRUE.equals(aliceSupport.get("hasMessages")));
+        List<Map<String, Object>> aliceMessages = list(admin.get("/api/admin/support/" + aliceId));
+        check("admin can read the user's private thread", aliceMessages.size() == 1
+                && "I need help with my item.".equals(aliceMessages.get(0).get("text"))
+                && !Boolean.TRUE.equals(aliceMessages.get(0).get("fromAdmin")));
+        List<Map<String, Object>> refreshedInbox = list(admin.get("/api/admin/support"));
+        for (Map<String, Object> row : refreshedInbox) {
+            if (((Number) row.get("userId")).intValue() == aliceId)
+                check("reading a thread clears its admin unread count", ((Number) row.get("unread")).intValue() == 0);
+        }
+        int aliceUnreadBeforeReply = ((Number) obj(alice.get("/api/me")).get("unread")).intValue();
+        admin.post("/api/admin/support/" + aliceId, map("text", "We can help with that submission."));
+        aliceMessages = list(alice.get("/api/me/support"));
+        check("admin can reply and users see support replies",
+                aliceMessages.size() == 2 && Boolean.TRUE.equals(aliceMessages.get(1).get("fromAdmin"))
+                        && ((Number) obj(alice.get("/api/me")).get("unread")).intValue() == aliceUnreadBeforeReply + 1);
+        admin.post("/api/admin/support/" + supportBobId, map("text", "Welcome to support."));
+        List<Map<String, Object>> bobMessages = list(bob.get("/api/me/support"));
+        check("admin can start a conversation and threads remain isolated",
+                bobMessages.size() == 1 && Boolean.TRUE.equals(bobMessages.get(0).get("fromAdmin"))
+                        && list(bob.get("/api/me/support")).size() == 1);
+        check("admin cannot start a conversation with another admin",
+                statusOf(() -> admin.post("/api/admin/support/" + obj(admin.get("/api/me")).get("id"),
+                        map("text", "Not allowed"))) == 400);
+        check("empty support messages are rejected",
+                statusOf(() -> alice.post("/api/me/support", map("text", "  "))) == 400);
+        StringBuilder overlongSupportMessage = new StringBuilder();
+        for (int i = 0; i < 4001; i++) overlongSupportMessage.append('x');
+        check("support messages over 4000 characters are rejected",
+                statusOf(() -> alice.post("/api/me/support", map("text", overlongSupportMessage.toString()))) == 400);
+        check("users cannot use administrator thread routes",
+                statusOf(() -> alice.get("/api/admin/support/" + supportBobId)) == 403);
+
         System.out.println("Reuse flow");
         Map<String, Object> phone = obj(alice.post("/api/items", map("name", "Pixel 4", "brand", "Google", "category", "MOBILE",
                 "ageYears", 2, "weightKg", 0.2, "condition", "WORKING", "description", "ok")));
@@ -117,7 +184,7 @@ public class ApiTest {
         Map<String, Object> col = obj(admin.post("/api/admin/items/" + phoneId + "/collect", null));
         check("collection awards points", ((Number) col.get("pointsAwarded")).intValue() == 6);
         check("alice has points", ((Number) obj(alice.get("/api/me")).get("points")).intValue() == 6);
-        check("alice has 4 unread (welcome, received, approved, collected)", ((Number) obj(alice.get("/api/me")).get("unread")).intValue() == 4);
+        check("alice has 5 unread including her support reply", ((Number) obj(alice.get("/api/me")).get("unread")).intValue() == 5);
         Map<String, Object> listing = obj(admin.post("/api/admin/listings", map("itemId", phoneId, "price", 100)));
         int lid = ((Number) listing.get("id")).intValue();
         check("market shows listing", list(bob.get("/api/market?q=pixel")).size() == 1);
@@ -238,6 +305,34 @@ public class ApiTest {
         alice.post("/api/me/password", map("oldPassword", "secret1", "newPassword", "newsecret"));
         check("password change works", "alice".equals(new ApiClient(url).login("alice", "newsecret").get("username")));
         check("profile update", "Alice Z".equals(obj(alice.put("/api/me", map("fullName", "Alice Z"))).get("fullName")));
+        int pointsBeforeEco = ((Number) obj(alice.get("/api/me")).get("points")).intValue();
+        Map<String, Object> ecoChallenge = obj(admin.post("/api/admin/eco/challenges", map("title", "Verified weekly donation",
+                "description", "A test challenge", "type", "DONATE_KG", "period", "WEEKLY",
+                "targetValue", 0.01, "rewardPoints", 9)));
+        int ecoChallengeId = ((Number) ecoChallenge.get("id")).intValue();
+        check("only admins can create eco challenges", statusOf(() -> alice.post("/api/admin/eco/challenges",
+                map("title", "Unauthorized", "type", "DONATE_KG", "period", "WEEKLY",
+                        "targetValue", 1, "rewardPoints", 50))) == 403);
+        Map<String, Object> ecoEnrollment = obj(alice.post("/api/eco/challenges/" + ecoChallengeId + "/enroll", map()));
+        check("verified existing activity completes enrollment and awards configured bonus",
+                "COMPLETED".equals(ecoEnrollment.get("status"))
+                        && ((Number) obj(alice.get("/api/me")).get("points")).intValue() == pointsBeforeEco + 9);
+        check("duplicate enrollment does not duplicate bonus points",
+                "COMPLETED".equals(obj(alice.post("/api/eco/challenges/" + ecoChallengeId + "/enroll", map())).get("status"))
+                        && ((Number) obj(alice.get("/api/me")).get("points")).intValue() == pointsBeforeEco + 9);
+        check("users cannot modify challenge progress or reward records",
+                statusOf(() -> alice.post("/api/eco/challenges/" + ecoChallengeId + "/progress", map("progress", 999))) == 404
+                        && statusOf(() -> alice.post("/api/eco/challenges/" + ecoChallengeId + "/rewards", map("points", 999))) == 404);
+        Map<String, Object> ecoView = obj(alice.get("/api/eco/challenges"));
+        check("eco page API provides achievements, progress and both leaderboards",
+                ecoView.containsKey("achievements") && ecoView.containsKey("weeklyLeaderboard")
+                        && ecoView.containsKey("monthlyLeaderboard")
+                        && list(ecoView.get("challenges")).stream().anyMatch(challenge ->
+                            ((Number) obj(challenge).get("id")).intValue() == ecoChallengeId
+                                    && "COMPLETED".equals(obj(challenge).get("status"))));
+        check("challenge leaderboard ranks verified bonus points",
+                !list(alice.get("/api/eco/leaderboard?period=WEEKLY")).isEmpty()
+                        && "Alice Z".equals(list(alice.get("/api/eco/leaderboard?period=WEEKLY")).get(0).get("name")));
         check("malformed JSON -> 400", statusOf(() -> alice.post("/api/items", "{bad")) == 400);
         alice.logout();
         check("logout invalidates token", statusOf(() -> alice.get("/api/me")) == 401);

@@ -13,7 +13,8 @@ import static com.ewaste.client.MapTable.*;
 
 /** A donor's own dashboard: reward tier, badges, progress, impact and active collection drives. */
 public class UserDashboardPage extends Page {
-    private final KpiCard kKg = new KpiCard("handed in"), kPoints = new KpiCard("reward points"), kCo2 = new KpiCard("CO2 avoided"), kItems = new KpiCard("items submitted");
+    private final KpiCard kKg = new KpiCard("handed in", 0), kPoints = new KpiCard("reward points", 1),
+            kCo2 = new KpiCard("CO2 avoided", 2), kItems = new KpiCard("items submitted", 3);
     private final JLabel tierName = new JLabel(" "), tierNote = new JLabel(" ");
     private final Meter tierMeter = new Meter();
     private final JPanel badges = new JPanel(new GridLayout(0, 4, 8, 8));
