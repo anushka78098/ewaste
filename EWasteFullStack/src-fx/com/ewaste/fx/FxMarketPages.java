@@ -37,7 +37,8 @@ final class FxMarketPages {
                 rows = new Fx.Grid().col("Listing", m -> m.get("listingId")).key("Item", "itemName")
                         .col("Price", m -> Ui.money(m.get("price")))
                         .col("Status", m -> Boolean.TRUE.equals(m.get("active")) ? "Listed" : Boolean.TRUE.equals(m.get("sold")) ? "Sold" : "Closed");
-                setTop(header("Your marketplace sales", Fx.button("Upload photo...", this::uploadPhoto), Fx.button("Refresh", this::refresh)));
+                setTop(header("Your marketplace listings", Fx.primary("Create listing...", this::createListing),
+                        Fx.button("Upload photo...", this::uploadPhoto), Fx.button("Refresh", this::refresh)));
             } else {
                 first = new Fx.Kpi("orders placed");
                 second = new Fx.Kpi("total spent");
@@ -74,6 +75,49 @@ final class FxMarketPages {
                     third.set(Ui.money(savings));
                     rows.setRows(purchases);
                 }
+            });
+        }
+
+        private void createListing() {
+            Fx.run(() -> ApiClient.list(app.api.get("/api/me/listings/eligible")), eligible -> {
+                if (eligible.isEmpty()) {
+                    Fx.info("There are no eligible items to list yet. An item must be collected and approved for reuse first.");
+                    return;
+                }
+                ComboBox<String> itemPicker = new ComboBox<>();
+                for (Map<String, Object> item : eligible)
+                    itemPicker.getItems().add("#" + item.get("id") + "  " + item.get("name") + " (" + item.get("categoryLabel") + ")");
+                itemPicker.getSelectionModel().selectFirst();
+                TextField price = new TextField();
+                price.setPromptText("e.g. 75.00");
+                Label photoName = Fx.muted("No photo selected (optional)");
+                Path[] photoPath = new Path[1];
+                Button choosePhoto = Fx.button("Choose PNG/JPEG...", () -> {
+                    FileChooser chooser = new FileChooser();
+                    chooser.setTitle("Choose a listing photo (maximum 4 MB)");
+                    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG or JPEG images", "*.png", "*.jpg", "*.jpeg"));
+                    File file = chooser.showOpenDialog(null);
+                    if (file != null) {
+                        photoPath[0] = file.toPath();
+                        photoName.setText(file.getName());
+                    }
+                });
+                if (!Fx.dialog("Create marketplace listing",
+                        Fx.form("Collected item", itemPicker, "Price ($)", price, "Photo", Fx.row(choosePhoto, photoName)))) return;
+                Map<String, Object> selected = eligible.get(itemPicker.getSelectionModel().getSelectedIndex());
+                double amount;
+                try { amount = Double.parseDouble(price.getText().trim()); }
+                catch (NumberFormatException e) { Fx.info("Enter a valid listing price."); return; }
+                if (!Double.isFinite(amount) || amount <= 0 || amount > 10_000_000) {
+                    Fx.info("Price must be greater than zero and no more than $10,000,000.");
+                    return;
+                }
+                Path selectedPhoto = photoPath[0];
+                Fx.run(() -> {
+                    Map<String, Object> body = ApiClient.map("itemId", selected.get("id"), "price", amount);
+                    if (selectedPhoto != null) body.putAll(ApiClient.filePayload(selectedPhoto));
+                    return ApiClient.obj(app.api.post("/api/me/listings", body));
+                }, result -> { Fx.info("Listing published."); refresh(); });
             });
         }
 

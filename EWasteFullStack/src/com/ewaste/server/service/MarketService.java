@@ -22,13 +22,37 @@ public class MarketService {
     }
 
     public Listing publish(int itemId, double price) {
-        EWasteItem i = items.require(itemId);
+        return publish(items.require(itemId), price);
+    }
+
+    public Listing publishForSeller(User seller, int itemId, double price) {
+        if (seller == null) throw new IllegalArgumentException("A signed-in seller is required.");
+        EWasteItem item = items.require(itemId);
+        if (item.ownerId != seller.id) throw new IllegalArgumentException("Only the item owner can list it.");
+        return publish(item, price);
+    }
+
+    public List<EWasteItem> eligibleItems(User seller) {
+        if (seller == null) throw new IllegalArgumentException("A signed-in seller is required.");
+        List<EWasteItem> out = new ArrayList<>();
+        for (EWasteItem item : repo.items()) {
+            if (item.ownerId == seller.id && item.status == ItemStatus.COLLECTED
+                    && item.decision == Decision.REUSE && !hasActiveListing(item.id)) out.add(item);
+        }
+        return out;
+    }
+
+    private Listing publish(EWasteItem i, double price) {
         if (i.status != ItemStatus.COLLECTED || i.decision != Decision.REUSE)
             throw new IllegalArgumentException("Only collected items with plan REUSE can be listed.");
-        if (price <= 0 || price > 10_000_000) throw new IllegalArgumentException("Price must be greater than zero.");
+        if (!Double.isFinite(price) || price <= 0 || price > 10_000_000)
+            throw new IllegalArgumentException("Price must be greater than zero and no more than $10,000,000.");
+        double roundedPrice = DecisionEngine.round2(price);
+        if (roundedPrice <= 0) throw new IllegalArgumentException("Price must be at least $0.01.");
+        if (hasActiveListing(i.id)) throw new IllegalArgumentException("This item already has an active market listing.");
         Listing l = new Listing();
-        l.itemId = itemId;
-        l.price = DecisionEngine.round2(price);
+        l.itemId = i.id;
+        l.price = roundedPrice;
         repo.addListing(l);
         i.status = ItemStatus.LISTED;
         repo.saveItem(i);
@@ -36,6 +60,12 @@ public class MarketService {
         notes.broadcast("New in the market: " + i.name + " (" + i.category.label + ", " + i.condition.label + ") for $"
                 + String.format("%.2f", l.price) + " - listing #" + l.id);
         return l;
+    }
+
+    private boolean hasActiveListing(int itemId) {
+        for (Listing listing : repo.listings())
+            if (listing.itemId == itemId && listing.active) return true;
+        return false;
     }
 
     public void updatePrice(int listingId, double newPrice) {

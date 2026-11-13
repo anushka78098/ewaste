@@ -24,6 +24,8 @@ Base URL `http://localhost:8080`. All bodies are JSON. Authenticated routes need
 | GET `/api/leaderboard` | | top 10 donors |
 | GET `/api/me/dashboard` | | `{points, pointsValue, kgDonated, co2Saved, itemCount, tier, badges[], pipeline, monthlyLabels[], monthlyKg[], equivalents, campaigns[], recent[]}` |
 | GET `/api/me/market/dashboard` | | `{buyer:{orders,totalSpent,recent[]}, seller:{activeListings,soldItems,salesTotal,items[]}}` |
+| GET `/api/me/listings/eligible` | | own collected items approved for reuse and not already actively listed |
+| POST `/api/me/listings` | `itemId, price, attachmentName?, attachmentType?, attachmentBase64?` | publish an owned collected/reusable item; optional PNG/JPEG photo (max 4 MB) |
 | GET `/api/me/certificate` | | printable HTML impact certificate (sent as an attachment) |
 | GET `/api/me/support` | | the signed-in user's private support conversation; marks admin replies as read |
 | POST `/api/me/support` | `text` (1–4000 characters) | send a private message to the administrators |
@@ -35,7 +37,7 @@ Base URL `http://localhost:8080`. All bodies are JSON. Authenticated routes need
 | POST `/api/items` | `name, brand?, category, ageYears, weightKg, condition, description?` | item (with `suggestedDecision`, `estimatedValue` and `decisionReport`) |
 | GET `/api/items/mine` | | own items |
 | GET `/api/items/{id}` | | item with `history` (owner or admin only) |
-| GET `/api/market` | `?q=&category=&maxPrice=` | active listings (includes seller name and optional `photoUrl`) |
+| GET `/api/market` | `?q=&category=&maxPrice=` | active listings (includes seller name and optional `photoUrl`; demo listings include generated product artwork) |
 | POST `/api/market/{listingId}/buy` | `points?` | order |
 | POST `/api/market/{listingId}/photo` | `attachmentName, attachmentType, attachmentBase64` | add/replace a photo; listing owner only; PNG/JPEG, max 4 MB |
 | GET `/api/market/{listingId}/photo` | | photo bytes; active listing, owner, or buyer only |

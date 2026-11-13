@@ -12,6 +12,7 @@ import com.sun.net.httpserver.HttpServer;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +43,15 @@ public class ApiTest {
         new AuthService(demo);
         check("fresh installation seeds 100 marketplace listings", DemoData.seedMarketplaceIfEmpty(demo) == 100
                 && demo.listings().size() == 100 && DemoData.seedMarketplaceIfEmpty(demo) == 0);
+        check("demo marketplace listings include local product images",
+                demo.listings().stream().allMatch(l -> l.photoData != null && "image/png".equals(l.photoMediaType))
+                        && ImageIO.read(new ByteArrayInputStream(demo.listings().get(0).photoData)) != null);
+        com.ewaste.model.Listing legacyDemoListing = demo.listings().get(0);
+        legacyDemoListing.photoData = null;
+        legacyDemoListing.photoMediaType = null;
+        demo.saveListing(legacyDemoListing);
+        check("existing demo listings receive missing images without reseeding",
+                DemoData.seedMarketplaceIfEmpty(demo) == 0 && demo.listing(legacyDemoListing.id).photoData != null);
         demo.close();
         Path blockedParent = Files.createTempFile("ewaste-snapshot-blocker", ".tmp");
         try {
@@ -173,6 +183,9 @@ public class ApiTest {
         Map<String, Object> phone = obj(alice.post("/api/items", map("name", "Pixel 4", "brand", "Google", "category", "MOBILE",
                 "ageYears", 2, "weightKg", 0.2, "condition", "WORKING", "description", "ok")));
         int phoneId = ((Number) phone.get("id")).intValue();
+        check("pending item is not eligible for seller listing", list(alice.get("/api/me/listings/eligible")).isEmpty());
+        check("seller cannot list before collection and approval",
+                statusOf(() -> alice.post("/api/me/listings", map("itemId", phoneId, "price", 100))) == 400);
         check("submit returns suggestion", "REUSE".equals(phone.get("suggestedDecision")) && num(phone.get("estimatedValue")) > 100);
         check("item response adds an explainable decision report",
                 "REUSE".equals(obj(phone.get("decisionReport")).get("recommendedAction"))
@@ -194,9 +207,33 @@ public class ApiTest {
         check("collection awards points", ((Number) col.get("pointsAwarded")).intValue() == 6);
         check("alice has points", ((Number) obj(alice.get("/api/me")).get("points")).intValue() == 6);
         check("alice has 5 unread including her support reply", ((Number) obj(alice.get("/api/me")).get("unread")).intValue() == 5);
-        Map<String, Object> listing = obj(admin.post("/api/admin/listings", map("itemId", phoneId, "price", 100)));
+        List<Map<String, Object>> eligibleListings = list(alice.get("/api/me/listings/eligible"));
+        check("seller sees own collected reusable item as eligible",
+                eligibleListings.size() == 1 && ((Number) eligibleListings.get(0).get("id")).intValue() == phoneId);
+        check("seller cannot publish another user's item",
+                statusOf(() -> bob.post("/api/me/listings", map("itemId", phoneId, "price", 100))) == 403);
+        check("seller listing price must remain positive after cent rounding",
+                statusOf(() -> alice.post("/api/me/listings", map("itemId", phoneId, "price", 0.001))) == 400);
+        byte[] png;
+        try {
+            BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", out);
+            png = out.toByteArray();
+        } catch (java.io.IOException e) { throw new RuntimeException(e); }
+        Map<String, Object> photo = map("attachmentName", "device.png", "attachmentType", "image/png",
+                "attachmentBase64", Base64.getEncoder().encodeToString(png));
+        Map<String, Object> sellerListingBody = map("itemId", phoneId, "price", 100);
+        sellerListingBody.putAll(photo);
+        Map<String, Object> listing = obj(alice.post("/api/me/listings", sellerListingBody));
         int lid = ((Number) listing.get("id")).intValue();
+        check("seller publishes own eligible item with optional listing photo",
+                ((Number) listing.get("ownerId")).intValue() == ((Number) obj(alice.get("/api/me")).get("id")).intValue()
+                        && !String.valueOf(listing.get("photoUrl")).isEmpty());
+        check("seller cannot publish the same item twice",
+                statusOf(() -> alice.post("/api/me/listings", map("itemId", phoneId, "price", 100))) == 400);
         check("market shows listing", list(bob.get("/api/market?q=pixel")).size() == 1);
+        check("buyer can view the photo uploaded with the listing", bob.getBytes("/api/market/" + lid + "/photo").length == png.length);
         Map<String, Object> passport = obj(anon.get("/api/passport/" + phone.get("trackingCode")));
         check("public passport contains an explainable score and privacy-safe journey",
                 ((Number) passport.get("circularityScore")).intValue() >= 0
@@ -207,15 +244,6 @@ public class ApiTest {
         check("market filter by category", list(bob.get("/api/market?category=LAPTOP")).isEmpty());
         check("market filter by max price", list(bob.get("/api/market?maxPrice=50")).isEmpty());
         check("bob notified of new listing", list(bob.get("/api/notifications")).get(0).get("message").toString().contains("New in the market"));
-        byte[] png;
-        try {
-            BufferedImage image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            ImageIO.write(image, "png", out);
-            png = out.toByteArray();
-        } catch (java.io.IOException e) { throw new RuntimeException(e); }
-        Map<String, Object> photo = map("attachmentName", "device.png", "attachmentType", "image/png",
-                "attachmentBase64", Base64.getEncoder().encodeToString(png));
         alice.post("/api/market/" + lid + "/photo", photo);
         check("seller can upload listing photo and buyer can download it",
                 bob.getBytes("/api/market/" + lid + "/photo").length == png.length);

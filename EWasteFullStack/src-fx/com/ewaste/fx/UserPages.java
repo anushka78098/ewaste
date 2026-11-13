@@ -271,7 +271,10 @@ final class UserPages {
 
         @Override void refresh() {
             String q = "/api/market?q=" + Fx.enc(keyword.getText().trim()) + "&category=" + Fx.enc(Fx.sel(category)) + "&maxPrice=" + Fx.enc(maxPrice.getText().trim());
-            Fx.run(() -> ApiClient.list(app.api.get(q)), table::setRows);
+            Fx.run(() -> ApiClient.list(app.api.get(q)), listings -> {
+                table.setRows(listings);
+                if (table.selected() == null && !table.getItems().isEmpty()) table.getSelectionModel().selectFirst();
+            });
         }
 
         private void buy() {

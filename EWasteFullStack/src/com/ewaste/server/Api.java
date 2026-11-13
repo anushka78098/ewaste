@@ -235,6 +235,26 @@ public class Api implements HttpHandler {
         route("GET", "/api/leaderboard", Access.USER, c -> reports.leaderboard(10));
         route("GET", "/api/me/dashboard", Access.USER, c -> analytics.userDashboard(c.user, LocalDate.now()));
         route("GET", "/api/me/market/dashboard", Access.USER, c -> analytics.marketDashboard(c.user));
+        route("GET", "/api/me/listings/eligible", Access.USER, c -> {
+            List<Object> out = new ArrayList<>();
+            for (EWasteItem item : market.eligibleItems(c.user)) out.add(itemDto(item));
+            return out;
+        });
+        route("POST", "/api/me/listings", Access.USER, c -> {
+            int itemId = c.integer("itemId");
+            EWasteItem item = items.require(itemId);
+            if (item.ownerId != c.user.id) throw new ApiException(403, "Only the item owner can list it.");
+            Upload photo = upload(c, true);
+            Listing listing = market.publishForSeller(c.user, itemId, c.dbl("price"));
+            if (photo != null) {
+                listing.photoFileName = photo.fileName;
+                listing.photoMediaType = photo.mediaType;
+                listing.photoData = photo.data;
+                repo.saveListing(listing);
+            }
+            ecoChallenges.refreshForUser(item.ownerId, LocalDate.now());
+            return Dto.listing(listing, item, ownerNames().getOrDefault(item.ownerId, "?"));
+        });
         route("GET", "/api/me/certificate", Access.USER, c ->
                 new Raw(analytics.certificateHtml(c.user, LocalDate.now()), "text/html; charset=utf-8", "impact-certificate.html"));
         route("GET", "/api/campaigns", Access.USER, c -> campaigns.list(true, LocalDate.now()));

@@ -60,7 +60,10 @@ public class MarketPage extends Page {
     @Override public void refresh() {
         String q = "/api/market?q=" + ApiClient.enc(keyword.getText().trim()) + "&category=" + ApiClient.enc(Ui.sel(category))
                 + "&maxPrice=" + ApiClient.enc(maxPrice.getText().trim());
-        Ui.run(this, () -> ApiClient.list(app.api.get(q)), table::setRows);
+        Ui.run(this, () -> ApiClient.list(app.api.get(q)), listings -> {
+            table.setRows(listings);
+            if (table.selected() == null && table.getRowCount() > 0) table.setRowSelectionInterval(0, 0);
+        });
     }
 
     private void buy() {
