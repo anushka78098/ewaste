@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds runnable jars into ./dist:
-#   ewaste-server.jar      server (needs lib/sqlite-jdbc-*.jar next to it for SQLite; works without, using the file store)
+#   ewaste-server.jar      server (needs JDBC driver jars in dist/lib/ for SQLite or PostgreSQL)
 #   ewaste-client.jar      Swing desktop client (double-click or: java -jar ewaste-client.jar [server-url])
 #   ewaste-client-fx.jar   JavaFX client (only if lib-fx/ exists; run with the java --module-path command printed below)
 set -e
@@ -8,9 +8,13 @@ cd "$(dirname "$0")/.."
 rm -rf dist build-tmp && mkdir -p dist/lib build-tmp/server build-tmp/client build-tmp/fx
 
 javac -d build-tmp/server $(find src/com/ewaste/common src/com/ewaste/model src/com/ewaste/server -name '*.java')
-SQLITE=$(ls lib/sqlite-jdbc-*.jar 2>/dev/null | head -1 || true)
 CP=""
-if [ -n "$SQLITE" ]; then cp "$SQLITE" dist/lib/; CP="lib/$(basename "$SQLITE")"; fi
+for DRIVER in lib/sqlite-jdbc-*.jar lib/postgresql-*.jar; do
+  [ -f "$DRIVER" ] || continue
+  cp "$DRIVER" dist/lib/
+  CP="${CP}lib/$(basename "$DRIVER") "
+done
+CP="${CP% }"
 printf 'Main-Class: com.ewaste.server.ServerMain\nClass-Path: %s\n' "$CP" > build-tmp/server.mf
 jar cfm dist/ewaste-server.jar build-tmp/server.mf -C build-tmp/server .
 

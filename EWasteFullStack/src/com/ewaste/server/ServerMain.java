@@ -4,6 +4,7 @@ import com.ewaste.server.mail.MailConfig;
 import com.ewaste.server.mail.Mailer;
 import com.ewaste.server.mail.SmtpMailer;
 import com.ewaste.server.repo.MemoryRepository;
+import com.ewaste.server.repo.PostgresRepository;
 import com.ewaste.server.repo.Repository;
 import com.ewaste.server.repo.SqliteRepository;
 import com.ewaste.server.service.AuthService;
@@ -24,7 +25,7 @@ import java.util.logging.SimpleFormatter;
 
 /**
  * Starts the REST backend.
- * Options: --port=8080  --host=127.0.0.1  --data=data  --store=auto|sqlite|file  --mail=config/mail.properties
+ * Options: --port=8080  --host=127.0.0.1  --data=data  --store=auto|sqlite|postgres|file  --mail=config/mail.properties
  * Each option can also be set with an environment variable: EWASTE_PORT, EWASTE_HOST, EWASTE_DATA, EWASTE_STORE, EWASTE_MAIL_FILE
  * (command-line options win). Mail settings: EWASTE_MAIL_ENABLED/HOST/PORT/SECURITY/USERNAME/PASSWORD/FROM.
  * Decision thresholds: EWASTE_DECISION_FILE. First admin password: EWASTE_ADMIN_PASSWORD.
@@ -37,6 +38,9 @@ public class ServerMain {
         String host = env("EWASTE_HOST", "127.0.0.1");
         String dataDir = env("EWASTE_DATA", "data");
         String store = env("EWASTE_STORE", "auto");
+        String databaseUrl = env("EWASTE_DB_URL", "");
+        String databaseUser = env("EWASTE_DB_USER", "");
+        String databasePassword = env("EWASTE_DB_PASSWORD", "");
         String mailFile = env("EWASTE_MAIL_FILE", "config/mail.properties");
         String decisionFile = env("EWASTE_DECISION_FILE", "config/decision.properties");
         for (String a : args) {
@@ -51,16 +55,24 @@ public class ServerMain {
         Handler fileLog = configureLogging(Paths.get(dataDir));
 
         Repository repo = null;
-        boolean wantSqlite = store.equals("sqlite") || (store.equals("auto") && SqliteRepository.driverAvailable());
-        if (wantSqlite) {
-            try {
-                repo = new SqliteRepository(Paths.get(dataDir, "ewaste.db").toString());
-            } catch (RuntimeException | LinkageError e) {
-                if (store.equals("sqlite")) throw e;
-                LOGGER.log(Level.WARNING, "SQLite could not be opened; falling back to the file-backed store.", e);
+        boolean wantPostgres = store.equals("postgres") || (store.equals("auto") && !databaseUrl.isEmpty());
+        if (wantPostgres) {
+            if (databaseUrl.isEmpty()) throw new IllegalArgumentException("EWASTE_DB_URL is required when using PostgreSQL.");
+            if (!PostgresRepository.driverAvailable())
+                throw new IllegalStateException("PostgreSQL JDBC driver not found; run scripts/setup-postgres.");
+            repo = new PostgresRepository(databaseUrl, databaseUser, databasePassword);
+        } else {
+            boolean wantSqlite = store.equals("sqlite") || (store.equals("auto") && SqliteRepository.driverAvailable());
+            if (wantSqlite) {
+                try {
+                    repo = new SqliteRepository(Paths.get(dataDir, "ewaste.db").toString());
+                } catch (RuntimeException | LinkageError e) {
+                    if (store.equals("sqlite")) throw e;
+                    LOGGER.log(Level.WARNING, "SQLite could not be opened; falling back to the file-backed store.", e);
+                }
+            } else if (store.equals("auto")) {
+                System.out.println("NOTE: SQLite driver not found in lib/. Using the file-backed store. Run scripts/setup-sqlite to enable SQLite.");
             }
-        } else if (store.equals("auto")) {
-            System.out.println("NOTE: SQLite driver not found in lib/. Using the file-backed store. Run scripts/setup-sqlite to enable SQLite.");
         }
         if (repo == null) repo = new MemoryRepository(Paths.get(dataDir, "ewaste.snapshot"));
         new AuthService(repo);

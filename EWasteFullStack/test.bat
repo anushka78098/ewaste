@@ -25,3 +25,20 @@ if exist lib\sqlite-jdbc-3.36.0.3.jar (
   java -cp "out;lib/*" com.ewaste.AuctionTest sqlite
   if errorlevel 1 exit /b 1
 )
+if defined EWASTE_TEST_POSTGRES_API_URL (
+  if not defined EWASTE_TEST_POSTGRES_AUCTION_URL (
+    echo EWASTE_TEST_POSTGRES_AUCTION_URL is required when running PostgreSQL integration tests.
+    exit /b 1
+  )
+  echo --- API and auction tests against disposable PostgreSQL ---
+  java -cp "out;lib/*" com.ewaste.ApiTest postgres
+  if errorlevel 1 exit /b 1
+  java -cp "out;lib/*" com.ewaste.AuctionTest postgres
+  if errorlevel 1 exit /b 1
+)
+if defined EWASTE_TEST_POSTGRES_AUCTION_URL (
+  if not defined EWASTE_TEST_POSTGRES_API_URL (
+    echo EWASTE_TEST_POSTGRES_API_URL is required when running PostgreSQL integration tests.
+    exit /b 1
+  )
+)

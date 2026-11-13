@@ -36,7 +36,8 @@ In the sign-in window, use `http://localhost:8080`. For the JavaFX client, insta
 
 ## 2. Connect the local database
 
-The application already uses SQLite; you do not need to create tables manually. The setup script installs the JDBC driver, and the server creates `data\ewaste.db` the first time it starts. Database schema updates are additive, so normal upgrades keep existing records.
+By default the application uses SQLite; you do not need to create tables manually. The setup script installs the JDBC driver, and the server creates
+`data\ewaste.db` the first time it starts. Database schema updates are additive, so normal upgrades keep existing records.
 
 With the server running, check which store it selected:
 
@@ -44,7 +45,7 @@ With the server running, check which store it selected:
 Invoke-RestMethod http://localhost:8080/api/health | Format-List
 ```
 
-The `store` value should say SQLite. If it says file-backed snapshot, check that `lib\sqlite-jdbc-3.36.0.3.jar` exists and restart the server. Stop the local server with **Ctrl+C** before making a simple backup:
+With the default setup, the `store` value should say SQLite. If it says file-backed snapshot, check that `lib\sqlite-jdbc-3.36.0.3.jar` exists and restart the server. PostgreSQL is also supported: install `.\scripts\setup-postgres.bat`, configure `EWASTE_STORE`, `EWASTE_DB_URL`, `EWASTE_DB_USER`, and `EWASTE_DB_PASSWORD`, and restart. The app creates its schema in the selected database, but switching stores does not copy existing records. Stop the local server with **Ctrl+C** before making a simple SQLite backup:
 
 ```powershell
 Copy-Item .\data\ewaste.db .\data\ewaste.db.bak
@@ -146,7 +147,7 @@ You need an Ubuntu VPS that stays online, a domain name, and access to change th
    Replace the example hostname with yours. Caddy requests the HTTPS certificate after DNS points to this VPS and ports 80/443 are reachable.
 7. On your Windows computer, start `.\run-client.bat` from the project folder and enter `https://ewaste.example.com` in the **Server** box. The JavaFX client can use the same server address.
 
-The container includes the SQLite JDBC driver and stores the database at `/data/ewaste.db`. Docker Compose mounts a persistent `ewaste-data` volume at `/data`, so the database survives container rebuilds and restarts. Confirm the `/api/health` response reports SQLite. Keep backups before server maintenance; see [DEPLOY.md](../DEPLOY.md) for a database-volume backup procedure.
+The default container setup includes the SQLite JDBC driver and stores the database at `/data/ewaste.db`. Docker Compose mounts a persistent `ewaste-data` volume at `/data`, so the database survives container rebuilds and restarts. To use PostgreSQL, copy `deploy/.env.example` to `.env`, set a unique `EWASTE_DB_PASSWORD`, then start with `docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build`. It uses a separate `ewaste-postgres` volume. Confirm `/api/health` reports the selected store. Keep backups before server maintenance; see [DEPLOY.md](../DEPLOY.md) for SQLite and PostgreSQL backup procedures.
 
 ## 5. Publish an update later
 

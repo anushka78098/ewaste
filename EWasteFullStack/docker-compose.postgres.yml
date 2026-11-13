@@ -1,0 +1,30 @@
+# Optional PostgreSQL deployment overlay. Keep docker-compose.yml unchanged for SQLite.
+# Start with:
+# docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+services:
+  app:
+    environment:
+      EWASTE_STORE: postgres
+      EWASTE_DB_URL: jdbc:postgresql://postgres:5432/ewaste
+      EWASTE_DB_USER: ${EWASTE_DB_USER:-ewaste}
+      EWASTE_DB_PASSWORD: ${EWASTE_DB_PASSWORD:?set EWASTE_DB_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ewaste
+      POSTGRES_USER: ${EWASTE_DB_USER:-ewaste}
+      POSTGRES_PASSWORD: ${EWASTE_DB_PASSWORD:?set EWASTE_DB_PASSWORD in .env}
+    volumes:
+      - ewaste-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  ewaste-postgres:

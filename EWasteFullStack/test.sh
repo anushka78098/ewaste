@@ -35,4 +35,16 @@ if ls lib/sqlite-jdbc*.jar >/dev/null 2>&1; then
   java -cp "out:lib/*" com.ewaste.AuctionTest sqlite > /tmp/ewaste_auction_sqlite.txt 2>&1 || code=1
   grep -E "FAIL|passed|Storage" /tmp/ewaste_auction_sqlite.txt
 fi
+
+if [ -n "${EWASTE_TEST_POSTGRES_API_URL:-}" ] || [ -n "${EWASTE_TEST_POSTGRES_AUCTION_URL:-}" ]; then
+  if [ -z "${EWASTE_TEST_POSTGRES_API_URL:-}" ] || [ -z "${EWASTE_TEST_POSTGRES_AUCTION_URL:-}" ]; then
+    echo "Set both EWASTE_TEST_POSTGRES_API_URL and EWASTE_TEST_POSTGRES_AUCTION_URL to disposable test databases."
+    exit 1
+  fi
+  echo "--- API and auction tests against disposable PostgreSQL ---"
+  java -cp "out:lib/*" com.ewaste.ApiTest postgres > /tmp/ewaste_postgres_api.txt 2>&1 || code=1
+  grep -E "FAIL|passed|Storage" /tmp/ewaste_postgres_api.txt
+  java -cp "out:lib/*" com.ewaste.AuctionTest postgres > /tmp/ewaste_postgres_auction.txt 2>&1 || code=1
+  grep -E "FAIL|passed|Storage" /tmp/ewaste_postgres_auction.txt
+fi
 exit $code

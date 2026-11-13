@@ -6,8 +6,8 @@ notifications, reward points, dashboards and optional emails.
 
 ```
  Swing client  ─┐
-                ├──HTTP + JSON──▶  Java REST backend  ──▶  SQLite database
- JavaFX client ─┘  (bearer token)  (com.ewaste.server)      (data/ewaste.db)
+                ├──HTTP + JSON──▶  Java REST backend  ──▶  SQLite or PostgreSQL
+ JavaFX client ─┘  (bearer token)  (com.ewaste.server)      (or file-backed fallback)
                                           │
                                           └──SMTP──▶ email to users (optional)
 ```
@@ -15,7 +15,7 @@ notifications, reward points, dashboards and optional emails.
 * **Two desktop clients, same backend:** a **Swing** client (`src/.../client`, Java2D charts) and a **JavaFX** client (`src-fx`, built-in charts). Both offer every screen.
 * **Updated workspace design:** role-aware blue side navigation, active-page feedback, live account indicators and colorful KPI cards across both clients.
 * **Backend:** REST API on the JDK's built-in HTTP server, salted password hashes, token sessions, login lockout.
-* **Database:** SQLite through JDBC (one driver jar, installed by a script) - or a file-backed store if you skip it.
+* **Database:** SQLite through JDBC by default, optional PostgreSQL through JDBC, or a file-backed store if no driver is installed.
 * **Email:** optional notifications through any SMTP server, written in pure Java.
 * **Marketplace demo:** on a fresh install, the server creates 100 reusable demo listings. Buyers and item donors have separate marketplace dashboards; donors can add listing photos and buyers can message donors with image/PDF attachments.
 * **Private admin support:** users and recyclers can contact administrators through a private support inbox, separate from listing-based buyer/seller messages.
@@ -24,9 +24,9 @@ notifications, reward points, dashboards and optional emails.
 * **Explainable decision reports:** category/age/condition-based estimates compare reuse, repair-and-reuse, recycling and hazardous disposal, with transparent financial and environmental estimates and configurable category thresholds.
 * No Maven, Gradle, Tomcat or Spring. Just a JDK (plus the JavaFX jars if you want the JavaFX client).
 
-**Honest status:** the REST API, Swing client, and SQLite-backed API tests are covered by the automated suite. The JavaFX client, including
-the marketplace screens, compiles with JavaFX 21 but has not had a separate GUI smoke test. Docker and real-provider SMTP/TLS still need
-end-to-end verification; see section 8.
+**Honest status:** the REST API, Swing client, and SQLite-backed API tests are covered by the automated suite. PostgreSQL support is implemented
+but requires verification against a live PostgreSQL server before production use. The JavaFX client compiles with JavaFX 21 but has not had a
+separate GUI smoke test. Docker and real-provider SMTP/TLS still need end-to-end verification; see section 8.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -34,13 +34,14 @@ end-to-end verification; see section 8.
 | | Needed for |
 |---|---|
 | **JDK 11 or newer** (`java -version` and `javac -version` both work; JDK 21 recommended) | everything |
-| Internet access once | SQLite driver (optional), JavaFX jars (JavaFX client only) |
+| Internet access once | SQLite/PostgreSQL JDBC driver (optional), JavaFX jars (JavaFX client only) |
 | Docker (optional) | deploying the server in a container |
 
 ## 2. Run it (Swing client) - 4 commands
 ```bash
 # Linux / macOS                       # Windows PowerShell (from the project folder)
 ./scripts/setup-sqlite.sh             .\scripts\setup-sqlite.bat    # once: installs the SQLite driver into lib/
+bash ./scripts/setup-postgres.sh      .\scripts\setup-postgres.bat  # optional: installs the PostgreSQL driver into lib/
 ./build.sh                            .\build.bat
 ./run-server.sh                       .\run-server.bat              # terminal 1: backend on http://localhost:8080
 ./run-client.sh                       .\run-client.bat              # terminal 2: Swing desktop app (start several to log in as different users)
@@ -48,12 +49,14 @@ end-to-end verification; see section 8.
 Choose **Admin**, **Seller**, or **Buyer** in the login mode selector. Admin mode requires the protected admin account; Seller and Buyer are modes for the same regular account and open the matching dashboard (both marketplace functions remain available). Recycler accounts can select **Recycler** to open recycler tools. Sign in as **admin / admin123** (you will be nagged on the dashboard to change it), or press *Create account...* to register a user.
 *Track an item...* on the sign-in window needs no account.
 
-If you skip `setup-sqlite`, the server still runs on a file-backed store (`data/ewaste.snapshot`) and says so at startup. Once the driver
-is in `lib/` it is picked up automatically (force with `--store=sqlite|file`; the two stores do not share data).
+If you skip `setup-sqlite`, the server still runs on a file-backed store (`data/ewaste.snapshot`) and says so at startup. SQLite remains the
+default when its driver is installed. To use PostgreSQL, install its driver, create a database/user, then set `EWASTE_STORE=postgres`,
+`EWASTE_DB_URL=jdbc:postgresql://localhost:5432/ewaste`, `EWASTE_DB_USER`, and `EWASTE_DB_PASSWORD` before starting the server.
+The app creates/updates tables but does not copy records from another store.
 
-Server options: `--port=8080 --host=127.0.0.1 --data=data --store=auto|sqlite|file --mail=config/mail.properties`, or the environment variables
-`EWASTE_PORT/HOST/DATA/STORE/MAIL_FILE` (command line wins). `EWASTE_ADMIN_PASSWORD` sets the first admin's password. To let other computers connect,
-use `--host=0.0.0.0` and type `http://<server-ip>:8080` in the client's *Server* box (or pass it as the first argument).
+Server options: `--port=8080 --host=127.0.0.1 --data=data --store=auto|sqlite|postgres|file --mail=config/mail.properties`, or the environment variables
+`EWASTE_PORT/HOST/DATA/STORE/DB_URL/DB_USER/DB_PASSWORD/MAIL_FILE` (command line wins). `EWASTE_ADMIN_PASSWORD` sets the first admin's password.
+To let other computers connect, use `--host=0.0.0.0` and type `http://<server-ip>:8080` in the client's *Server* box (or pass it as the first argument).
 
 ## 3. Run it (JavaFX client)
 Same server as above, plus:
@@ -132,12 +135,12 @@ src/com/ewaste/
   server/      ServerMain, Api (routes), Dto, Sessions, LoginThrottle, HealthCheck
     service/   Auth, Item, Market, Recycling, Notification, Report, DecisionEngine, Tracking, CampaignService, AnalyticsService
     mail/      Mailer, SmtpMailer (pure-Java SMTP client), MailConfig
-    repo/      Repository + SqliteRepository (JDBC) + MemoryRepository (file-backed fallback / tests)
+    repo/      Repository + JDBC, SQLite and PostgreSQL repositories + MemoryRepository (file-backed fallback / tests)
   client/      Swing: ApiClient, LoginFrame, MainFrame, one navigable Page per screen; charts/ = Java2D bar, line, donut, horizontal bar, meter
 src-fx/com/ewaste/fx/   JavaFX: FxMain (login + tracker), MainView, UserPages, AdminPages, FxDashboards, Charts, Fx helpers
 test/        ApiTest, DashboardTest, MailTest (+FakeSmtpServer), GuiSmoke (opens every Swing window), ThrottleTest
 deploy/      Caddyfile, nginx.conf, ewaste.service, .env.example      Dockerfile, docker-compose.yml
-scripts/     setup-sqlite.*, setup-javafx.*, package.sh, make-installer.*, check_sql.py
+scripts/     setup-sqlite.*, setup-postgres.*, setup-javafx.*, package.sh, make-installer.*, check_sql.py
 config/      mail.properties.example        docs/  API.md + screenshots
 ```
 Database tables (created and migrated automatically): `users, items, item_history, listings, orders, market_messages, notifications, batches, batch_items, campaigns`.
@@ -147,6 +150,7 @@ REST endpoints: [docs/API.md](docs/API.md).
 ```bash
 ./test.sh        # API, mail, dashboards, and throttle tests; repeats API tests on SQLite when the driver is installed
 # Windows PowerShell: .\test.bat
+# PostgreSQL integration: also set EWASTE_TEST_POSTGRES_USER/PASSWORD and two separate disposable DB URLs
 python3 scripts/check_sql.py                       # runs every SQL statement against a real SQLite engine (also the schema migration)
 xvfb-run java -cp "out:out-test:lib/*" com.ewaste.GuiSmoke shots   # Linux headless: opens every Swing window, saves screenshots
 ```
@@ -155,6 +159,7 @@ xvfb-run java -cp "out:out-test:lib/*" com.ewaste.GuiSmoke shots   # Linux headl
 | REST API, business rules, dashboards, drives, tracking, throttle | automated tests pass (in-memory store, real HTTP) |
 | Swing client, all tabs incl. dashboards | opened with real data under a virtual display, screenshots inspected |
 | SQLite repository | API tests also run against SQLite when the JDBC driver is installed; schema SQL can be validated with Python's `sqlite3` |
+| PostgreSQL repository | Implemented with a separate PostgreSQL schema; run against a test database before production use |
 | Email | tested against a fake SMTP server (plain + AUTH); **STARTTLS/SSL not run against a real provider** - use the test button first |
 | JavaFX client | compiled with JavaFX 21; no separate GUI smoke test |
 | Dockerfile / compose / Caddy | the build steps and start-up were replayed by hand (same compile, env vars, health check); **no Docker daemon was available**, so the image itself was never built |

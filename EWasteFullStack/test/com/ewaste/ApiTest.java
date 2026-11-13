@@ -57,9 +57,18 @@ public class ApiTest {
         } finally {
             Files.deleteIfExists(blockedParent);
         }
-        Repository repo = args.length > 0 && args[0].equals("sqlite")
-                ? new com.ewaste.server.repo.SqliteRepository(java.nio.file.Files.createTempFile("ewaste", ".db").toString())
-                : new MemoryRepository(null);
+        Repository repo;
+        if (args.length > 0 && args[0].equals("sqlite")) {
+            repo = new com.ewaste.server.repo.SqliteRepository(Files.createTempFile("ewaste", ".db").toString());
+        } else if (args.length > 0 && args[0].equals("postgres")) {
+            String jdbcUrl = System.getenv("EWASTE_TEST_POSTGRES_API_URL");
+            if (jdbcUrl == null || jdbcUrl.trim().isEmpty())
+                throw new IllegalArgumentException("EWASTE_TEST_POSTGRES_API_URL must point to a disposable PostgreSQL test database.");
+            repo = new com.ewaste.server.repo.PostgresRepository(jdbcUrl,
+                    System.getenv("EWASTE_TEST_POSTGRES_USER"), System.getenv("EWASTE_TEST_POSTGRES_PASSWORD"));
+        } else {
+            repo = new MemoryRepository(null);
+        }
         System.out.println("Storage: " + repo.describe());
         HttpServer server = ServerMain.start(repo, "127.0.0.1", 0);
         String url = "http://127.0.0.1:" + server.getAddress().getPort();
